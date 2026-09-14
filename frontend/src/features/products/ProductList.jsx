@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import PosLayout from "../../layouts/PosLayout";
+import { scanProductSku } from "../../platform/native";
 import { getCatalogBootstrap, searchLocalProducts } from "../offline/localStore";
 import { syncNow } from "../offline/syncEngine";
 
@@ -37,6 +38,16 @@ export default function ProductList() {
 
   useEffect(() => { load(false); }, [load]);
 
+  const scanProduct = async () => {
+    setError("");
+    try {
+      const result = await scanProductSku();
+      if (result) setQuery(result);
+    } catch (scanError) {
+      setError(scanError.message || "QR produk gagal dipindai.");
+    }
+  };
+
   const rows = useMemo(() => products.flatMap((product) =>
     (product.product_variations || []).flatMap((group) => (group.variations || []).map((variation) => {
       const balances = variation.variation_location_details || [];
@@ -61,7 +72,12 @@ export default function ProductList() {
             </div>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari nama atau SKU…" className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400" />
+            <div className="flex gap-2">
+              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari nama atau SKU…" className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400" />
+              <button type="button" onClick={scanProduct} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md" aria-label="Pindai QR produk" title="Pindai QR produk">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm11 0h2v2h-2v-2Zm3 0h2v3h-2v-3Zm-3 4h3v2h-3v-2Z" /></svg>
+              </button>
+            </div>
             <select value={locationId} onChange={(event) => setLocationId(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold">
               {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
             </select>

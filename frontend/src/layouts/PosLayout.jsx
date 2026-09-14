@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
+import { isNative } from "../platform/native";
+import { openCashDrawer } from "../platform/thermalPrinter";
 import { logout } from "../utils/auth";
 
 const links = [
@@ -13,9 +16,17 @@ const links = [
 export default function PosLayout({ title, children }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [drawerBusy, setDrawerBusy] = useState(false);
   const signOut = async () => {
     await logout();
     navigate("/login", { replace: true });
+  };
+  const openDrawer = async () => {
+    if (!window.confirm("Buka laci kasir melalui printer thermal yang aktif?")) return;
+    setDrawerBusy(true);
+    try { await openCashDrawer(); }
+    catch (error) { window.alert(error.message || "Laci kasir gagal dibuka."); }
+    finally { setDrawerBusy(false); }
   };
   return (
     <div className="min-h-[100dvh] bg-[radial-gradient(circle_at_top,#e0f2fe_0,#f1f5f9_36%,#f8fafc_100%)] pb-28">
@@ -24,7 +35,10 @@ export default function PosLayout({ title, children }) {
           <img src="/asas-pos-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
           <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">ASAS POS</p><h1 className="truncate text-lg font-black text-slate-900">{title}</h1></div>
         </div>
-        <button type="button" onClick={signOut} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">Keluar</button>
+        <div className="flex items-center gap-2">
+          {isNative && <button type="button" onClick={openDrawer} disabled={drawerBusy} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-extrabold text-amber-800 disabled:opacity-50">{drawerBusy ? "Membuka…" : "Buka Laci"}</button>}
+          <button type="button" onClick={signOut} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">Keluar</button>
+        </div>
       </header>
       <main className="mx-auto max-w-4xl p-3">{children}</main>
       <nav className="liquid-glass-nav liquid-nav-safe-bottom fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 items-end rounded-[28px] border border-white/70 bg-white/65 px-2 pt-2 shadow-[0_18px_55px_rgba(15,23,42,0.22),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-2xl sm:inset-x-auto sm:left-1/2 sm:w-[520px] sm:-translate-x-1/2">

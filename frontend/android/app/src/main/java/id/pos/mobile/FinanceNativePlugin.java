@@ -650,7 +650,7 @@ public class FinanceNativePlugin extends Plugin {
         int padding = narrowPaper ? 6 : 8;
         float textSize = narrowPaper ? 17f : 21f;
         float whatsappTextSize = narrowPaper ? 20f : 26f;
-        int textWidth = width - qrSize - padding - 1;
+        int textWidth = width - qrSize - padding * 2 - 2;
 
         Paint textPaint = new Paint();
         textPaint.setColor(Color.BLACK);
@@ -664,19 +664,45 @@ public class FinanceNativePlugin extends Plugin {
 
         Paint whatsappPaint = new Paint(textPaint);
         whatsappPaint.setTextSize(whatsappTextSize);
+        Paint disclaimerPaint = new Paint(textPaint);
+        disclaimerPaint.setTextSize(narrowPaper ? 14f : 17f);
 
-        List<String> lines = wrapFooterLines(printerSafe(footer), textPaint, whatsappPaint, textWidth);
+        String safeFooter = printerSafe(footer);
+        String[] paragraphs = safeFooter.split("\\n");
+        String disclaimer = "";
+        StringBuilder body = new StringBuilder();
+        for (String paragraph : paragraphs) {
+            String trimmed = paragraph.trim();
+            if (trimmed.isEmpty()) continue;
+            if (disclaimer.isEmpty() && trimmed.toLowerCase().startsWith("barang terbeli")) disclaimer = trimmed;
+            else {
+                if (body.length() > 0) body.append('\n');
+                body.append(trimmed);
+            }
+        }
+        List<String> disclaimerLines = disclaimer.isEmpty()
+            ? new ArrayList<>()
+            : wrapFooterLines(disclaimer, disclaimerPaint, disclaimerPaint, width - padding * 2);
+        List<String> lines = wrapFooterLines(body.toString(), textPaint, whatsappPaint, textWidth);
         int lineGap = narrowPaper ? 3 : 4;
+        int disclaimerHeight = disclaimerLines.size() * Math.round(disclaimerPaint.getTextSize() + lineGap);
         int textHeight = 0;
         for (String line : lines) {
             textHeight += Math.round((line.startsWith("WHATSAPP:") ? whatsappTextSize : textSize) + lineGap);
         }
-        int height = Math.max(qrSize + padding * 2, textHeight + padding * 2);
+        int bodyHeight = Math.max(qrSize, textHeight);
+        int height = disclaimerHeight + bodyHeight + padding * 2;
         Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(result);
         canvas.drawColor(Color.WHITE);
 
         float baseline = padding;
+        for (String line : disclaimerLines) {
+            baseline += disclaimerPaint.getTextSize();
+            drawThermalText(canvas, line, padding, Math.round(baseline), disclaimerPaint);
+            baseline += lineGap;
+        }
+        baseline = padding + disclaimerHeight;
         for (String line : lines) {
             Paint activePaint = line.startsWith("WHATSAPP:") ? whatsappPaint : textPaint;
             baseline += activePaint.getTextSize();
@@ -691,7 +717,7 @@ public class FinanceNativePlugin extends Plugin {
         qrPaint.setColor(Color.BLACK);
         qrPaint.setAntiAlias(false);
         float qrLeft = width - qrSize - padding;
-        float qrTop = (height - qrSize) / 2f;
+        float qrTop = padding + disclaimerHeight + (bodyHeight - qrSize) / 2f;
         for (int y = 0; y < qrSize; y++) {
             for (int x = 0; x < qrSize; x++) {
                 if (matrix.get(x, y)) canvas.drawPoint(qrLeft + x, qrTop + y, qrPaint);
@@ -739,24 +765,23 @@ public class FinanceNativePlugin extends Plugin {
         int rasterWidth,
         boolean narrowPaper
     ) throws Exception {
-        int reservedQrSize = narrowPaper ? 96 : 124;
         int padding = narrowPaper ? 6 : 8;
         float textSize = narrowPaper ? 17f : 21f;
         float whatsappTextSize = narrowPaper ? 20f : 26f;
-        float textWidth = rasterWidth - reservedQrSize - padding - 1;
+        float textWidth = rasterWidth - padding * 2;
 
         Paint textPaint = new Paint();
         textPaint.setTextSize(textSize);
         textPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         Paint compactTextPaint = new Paint(textPaint);
-        compactTextPaint.setTextSize(14f);
+        compactTextPaint.setTextSize(narrowPaper ? 14f : 17f);
         Paint whatsappPaint = new Paint(textPaint);
         whatsappPaint.setTextSize(whatsappTextSize);
 
         for (String paragraph : printerSafe(footer).split("\\n")) {
             String trimmedParagraph = paragraph.trim();
             if (trimmedParagraph.isEmpty()) continue;
-            boolean compact = narrowPaper && trimmedParagraph.toLowerCase().startsWith("barang terbeli");
+            boolean compact = trimmedParagraph.toLowerCase().startsWith("barang terbeli");
             Paint activePaint = compact
                 ? compactTextPaint
                 : (trimmedParagraph.startsWith("WHATSAPP:") ? whatsappPaint : textPaint);

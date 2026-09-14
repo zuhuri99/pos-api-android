@@ -4,10 +4,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import ConfirmModal from "../../../components/ConfirmModal";
 import ErrorAlert from "../../../components/ErrorAlert";
 import PosLayout from "../../../layouts/PosLayout";
-import { isNative, scanProductSku } from "../../../platform/native";
-import {
-  openCashDrawer,
-} from "../../../platform/thermalPrinter";
+import { scanProductSku } from "../../../platform/native";
 import { syncNow } from "../../offline/syncEngine";
 import { getActiveAccount } from "../../../utils/auth";
 import { posApi } from "../api/posApi";
@@ -93,10 +90,6 @@ export default function PosTransactionForm() {
   const [searchingProducts, setSearchingProducts] = useState(false);
   const [generatingInvoice, setGeneratingInvoice] = useState(!isEdit);
   const [saving, setSaving] = useState(false);
-  const [drawerBusy, setDrawerBusy] = useState(false);
-  const [drawerMessage, setDrawerMessage] = useState("");
-  const [drawerFailed, setDrawerFailed] = useState(false);
-  const [drawerConfirmOpen, setDrawerConfirmOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [error, setError] = useState("");
   const [showMore, setShowMore] = useState(false);
@@ -436,20 +429,21 @@ export default function PosTransactionForm() {
     }));
   };
 
-  const handleOpenDrawer = async () => {
-    setDrawerBusy(true);
-    setDrawerMessage("");
-    setDrawerFailed(false);
-    try {
-      await openCashDrawer();
-      setDrawerMessage("Perintah buka laci berhasil dikirim.");
-    } catch (drawerError) {
-      setDrawerFailed(true);
-      setDrawerMessage(drawerError.message || "Laci kasir gagal dibuka.");
-    } finally {
-      setDrawerBusy(false);
-      setDrawerConfirmOpen(false);
-    }
+  const resetPos = () => {
+    if (!window.confirm("Reset seluruh data yang sedang diisi pada form POS?")) return;
+    const generalCustomer = contacts.find(
+      (contact) => contactLabel(contact).trim().toLowerCase() === "umum",
+    );
+    setForm({
+      ...emptyForm(),
+      location_id: String(locations[0]?.id || ""),
+      contact_id: String(generalCustomer?.id || contacts[0]?.id || ""),
+    });
+    setProductQuery("");
+    setProductOptions([]);
+    setPaymentOpen(false);
+    setShowMore(false);
+    setError("");
   };
 
   const selectProduct = (product) => {
@@ -605,7 +599,6 @@ export default function PosTransactionForm() {
     <PosLayout title={isEdit ? `Edit Transaksi #${id}` : "Kasir POS"}>
       <form onSubmit={requestSubmit} className="mx-auto w-full min-w-0 max-w-[1600px] overflow-x-clip pb-28 lg:pb-4">
         {error && <div className="fixed inset-x-0 top-4 z-[140] mx-auto w-[calc(100%-2rem)] max-w-lg shadow-2xl"><ErrorAlert message={error} onClose={() => setError("")} /></div>}
-        {drawerMessage && <button type="button" onClick={() => setDrawerMessage("")} className={`fixed inset-x-4 top-4 z-[140] mx-auto max-w-lg rounded-2xl border p-4 text-left text-sm font-bold shadow-2xl ${drawerFailed ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{drawerMessage}<span className="float-right ml-3">×</span></button>}
 
         <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.72fr)] xl:grid-cols-[minmax(0,1.65fr)_400px]">
           <section className="min-w-0 space-y-3">
@@ -615,11 +608,7 @@ export default function PosTransactionForm() {
                   <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#0067b8]">Detail penjualan</p>
                   <p className="truncate text-xs text-slate-400">Lokasi, nota, waktu dan customer</p>
                 </div>
-                {isNative && (
-                  <button type="button" onClick={() => setDrawerConfirmOpen(true)} disabled={drawerBusy} className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-extrabold text-amber-800 transition active:scale-95 disabled:opacity-50">
-                    {drawerBusy ? "Membuka…" : "Buka Laci"}
-                  </button>
-                )}
+                {!isEdit && <button type="button" onClick={resetPos} className="shrink-0 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-extrabold text-red-700 transition active:scale-95">Reset Data</button>}
               </div>
               <div className="grid min-w-0 grid-cols-2 gap-2.5">
                 {isSuperuser && sources.length > 1 && (
@@ -853,7 +842,6 @@ export default function PosTransactionForm() {
         </div>
       )}
 
-      <ConfirmModal open={drawerConfirmOpen} onClose={() => !drawerBusy && setDrawerConfirmOpen(false)} onConfirm={handleOpenDrawer} busy={drawerBusy} title="Buka laci kasir?" message="Pastikan area di depan laci tidak terhalang. Perintah buka akan dikirim ke printer thermal yang aktif." confirmLabel="Buka Laci" confirmClassName="bg-amber-600 text-white" />
       <ConfirmModal open={confirmOpen} onClose={() => !saving && setConfirmOpen(false)} onConfirm={submit} busy={saving} title={form.status === "draft" ? "Simpan sebagai draft?" : isEdit ? "Simpan perubahan transaksi?" : "Buat transaksi POS?"} message={form.status === "draft" ? `${form.products.length} produk dengan total ${formatPosCurrency(total)} akan disimpan sebagai transaksi sementara dan belum final.` : `${form.products.length} produk dengan total ${formatPosCurrency(total)} akan ${isEdit ? "diperbarui" : "disimpan dan masuk antrean sinkronisasi"}.`} confirmLabel={form.status === "draft" ? "Simpan Draft" : isEdit ? "Simpan" : "Buat Transaksi"} confirmClassName="bg-[#0067b8] text-white" />
     </PosLayout>
   );
