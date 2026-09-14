@@ -18,7 +18,7 @@ from ..models import (
     StockMovement,
     User,
 )
-from ..schemas import SaleCreate
+from ..schemas import SaleCreate, SaleMark
 from .invoices import next_online_invoice, validate_invoice_period, validate_invoice_reservation
 
 
@@ -62,6 +62,10 @@ def serialize_sale(sale: Sale, contact_name: str | None = None, cashier_name: st
         "voided_at": sale.voided_at.isoformat() if sale.voided_at else None,
         "voided_by": sale.voided_by,
         "void_reason": sale.void_reason,
+        "marked_at": sale.marked_at.isoformat() if sale.marked_at else None,
+        "marked_by": sale.marked_by,
+        "mark_type": sale.mark_type,
+        "mark_reason": sale.mark_reason,
         "products": [
             {
                 "sell_line_id": line.id,
@@ -109,6 +113,25 @@ def get_sale(db: Session, business_id: int, sale_id: int) -> Sale:
     ).unique().scalar_one_or_none()
     if not sale:
         raise HTTPException(404, "Transaksi tidak ditemukan.")
+    return sale
+
+
+def mark_sale(db: Session, user: User, sale: Sale, data: SaleMark) -> Sale:
+    if sale.status == "void":
+        raise HTTPException(409, "Transaksi yang sudah dihapus tidak dapat ditandai.")
+    sale.marked_at = datetime.now(timezone.utc)
+    sale.marked_by = user.id
+    sale.mark_type = data.mark_type
+    sale.mark_reason = data.reason
+    sale.revision += 1
+    contact = db.get(Contact, sale.contact_id)
+    creator = db.scalar(select(User.username).where(User.id == sale.created_by))
+    db.add(ChangeLog(
+        business_id=user.business_id, entity_type="sale", entity_uuid=sale.uuid,
+        action="upsert", revision=sale.revision,
+        payload=serialize_sale(sale, contact.name if contact else None, creator),
+    ))
+    db.flush()
     return sale
 
 

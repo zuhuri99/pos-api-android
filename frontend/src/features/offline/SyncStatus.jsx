@@ -20,6 +20,7 @@ export default function SyncStatus() {
     synced: "Tersinkron",
     pending: "Menunggu",
     pending_delete: "Menunggu hapus",
+    pending_mark: "Menunggu tanda",
     failed: "Gagal",
   }[value] || value || "Menunggu");
   const statusClass = (value) => value === "synced"
@@ -27,7 +28,7 @@ export default function SyncStatus() {
     : value === "failed"
       ? "bg-red-100 text-red-700"
       : "bg-amber-100 text-amber-800";
-  const actionLabel = (value) => ({ create: "Buat", update: "Ubah", delete: "Hapus" }[value] || value);
+  const actionLabel = (value) => ({ create: "Buat", update: "Ubah", delete: "Hapus", mark: "Tandai" }[value] || value);
   const dateLabel = (value) => value
     ? new Date(String(value).replace(" ", "T")).toLocaleString("id-ID")
     : "-";

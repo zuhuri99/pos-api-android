@@ -11,6 +11,9 @@ const readWeb = () => {
   catch { return emptyWebStore(); }
 };
 const writeWeb = (data) => localStorage.setItem(WEB_KEY, JSON.stringify(data));
+const isActiveProduct = (product) => product?.is_active !== undefined
+  ? Number(product.is_active) === 1
+  : Number(product?.is_inactive || 0) !== 1;
 
 async function nativeDb() {
   if (!isNative) return null;
@@ -70,16 +73,17 @@ export async function getMeta(key) {
 }
 
 export async function replaceCatalog({ products = [], contacts = [], locations = [], cursor = 0 }) {
+  const activeProducts = products.filter(isActiveProduct);
   const db = await nativeDb();
   if (!db) {
     const data = readWeb();
-    Object.assign(data, { products, contacts, locations });
+    Object.assign(data, { products: activeProducts, contacts, locations });
     data.meta.cursor = String(cursor);
     writeWeb(data);
     return;
   }
   await db.execute("DELETE FROM products; DELETE FROM contacts; DELETE FROM locations;");
-  for (const product of products) {
+  for (const product of activeProducts) {
     await db.run("INSERT INTO products(id,sku,name,payload) VALUES (?,?,?,?)", [product.id, product.sku || "", product.name || "", JSON.stringify(product)]);
   }
   for (const contact of contacts) {
@@ -95,8 +99,13 @@ export async function upsertProduct(product) {
   const db = await nativeDb();
   if (!db) {
     const data = readWeb();
-    data.products = [...data.products.filter((row) => row.id !== product.id), product];
+    data.products = data.products.filter((row) => row.id !== product.id);
+    if (isActiveProduct(product)) data.products.push(product);
     writeWeb(data); return;
+  }
+  if (!isActiveProduct(product)) {
+    await db.run("DELETE FROM products WHERE id=?", [product.id]);
+    return;
   }
   await db.run("INSERT OR REPLACE INTO products(id,sku,name,payload) VALUES (?,?,?,?)", [product.id, product.sku || "", product.name || "", JSON.stringify(product)]);
 }
@@ -220,7 +229,8 @@ export async function getCatalogBootstrap() {
 export async function searchLocalProducts({ name, sku, per_page = 50 } = {}) {
   const term = String(name || sku || "").trim().toLowerCase();
   const db = await nativeDb();
-  const all = !db ? readWeb().products : parseRows((await db.query("SELECT payload FROM products ORDER BY name")).values);
+  const stored = !db ? readWeb().products : parseRows((await db.query("SELECT payload FROM products ORDER BY name")).values);
+  const all = stored.filter(isActiveProduct);
   if (!term) return all.slice(0, per_page);
   return all.filter((product) => {
     const variations = product.product_variations?.flatMap((group) => group.variations || []) || [];
@@ -373,6 +383,36 @@ export async function listLocalSales(year) {
   const rows = !db ? readWeb().sales : (await db.query("SELECT local_id,payload,state,server_id,last_error FROM sales ORDER BY transaction_date DESC")).values || [];
   return rows.map((row) => ({ ...(typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload), id: row.server_id || row.local_id, sync_state: row.state }))
     .filter((row) => row.status !== "void" && (!year || String(row.transaction_date).startsWith(String(year))));
+}
+
+export async function queueLocalSaleMark(id, markType, reason) {
+  const operationId = crypto.randomUUID();
+  const markedAt = new Date().toISOString();
+  const markPayload = { mark_type: markType, reason };
+  const db = await nativeDb();
+  if (!db) {
+    const data = readWeb();
+    const sale = data.sales.find((row) => row.local_id === String(id) || String(row.server_id) === String(id));
+    if (!sale) throw new Error("Transaksi tidak ditemukan di perangkat.");
+    sale.state = "pending_mark";
+    sale.payload = { ...sale.payload, marked_at: markedAt, mark_type: markType, mark_reason: reason, sync_state: "pending_mark" };
+    data.outbox.push({ operation_id: operationId, entity_id: sale.local_id, action: "mark", payload: markPayload, attempts: 0, created_at: markedAt });
+    writeWeb(data);
+    return sale.payload;
+  }
+  await db.beginTransaction();
+  try {
+    const row = (await db.query("SELECT local_id,payload FROM sales WHERE local_id=? OR server_id=? LIMIT 1", [String(id), Number(id) || -1])).values?.[0];
+    if (!row) throw new Error("Transaksi tidak ditemukan di perangkat.");
+    const stored = { ...JSON.parse(row.payload), marked_at: markedAt, mark_type: markType, mark_reason: reason, sync_state: "pending_mark" };
+    await db.run("UPDATE sales SET state='pending_mark',payload=?,last_error=NULL WHERE local_id=?", [JSON.stringify(stored), row.local_id], false);
+    await db.run("INSERT INTO outbox(operation_id,entity_id,action,payload,created_at) VALUES (?,?,?,?,?)", [operationId, row.local_id, "mark", JSON.stringify(markPayload), markedAt], false);
+    await db.commitTransaction();
+    return stored;
+  } catch (error) {
+    await db.rollbackTransaction();
+    throw error;
+  }
 }
 
 export async function queueLocalSaleDelete(id, reason = "Transaksi salah") {

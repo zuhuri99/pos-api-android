@@ -8,6 +8,7 @@ import {
   getLocalStock,
   applyRemoteSaleDelete,
   listLocalSales,
+  queueLocalSaleMark,
   queueLocalSaleDelete,
   saveLocalSale,
   searchLocalProducts,
@@ -190,5 +191,18 @@ export const posApi = {
       data: { reason },
       skipIncomeFallback: true,
     });
+  },
+  async mark(id, markType, reason) {
+    const existing = await getLocalSale(String(id));
+    if (existing) {
+      const local = await queueLocalSaleMark(String(id), markType, reason);
+      if (navigator.onLine) syncNow().catch(() => {});
+      return response(local, { success: true });
+    }
+    if (!navigator.onLine) throw new Error("Transaksi tidak tersedia di perangkat untuk ditandai secara offline.");
+    return incomeApi.patch(`/income/pos/transactions/${id}/mark`, {
+      mark_type: markType,
+      reason,
+    }, { skipIncomeFallback: true });
   },
 };

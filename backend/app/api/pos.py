@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..core.db import get_db
 from ..models import Contact, InventoryBalance, Location, Product, ProductVariation, Sale, User
-from ..schemas import InvoiceReservationRequest, SaleCreate, SaleDelete
+from ..schemas import InvoiceReservationRequest, SaleCreate, SaleDelete, SaleMark
 from ..services.invoices import reserve_invoice_numbers
 from ..services.notifications import queue_transaction_notification
-from ..services.sales import create_sale, get_sale, serialize_sale, update_sale, void_sale
+from ..services.sales import create_sale, get_sale, mark_sale, serialize_sale, update_sale, void_sale
 from .deps import authorize_sale_delete, current_user
 
 router = APIRouter(prefix="/api/v1", tags=["pos"])
@@ -33,7 +33,9 @@ def product_payload(product: Product, location_id: int | None) -> dict:
         })
     return {
         "id": product.id, "uuid": product.uuid, "name": product.name, "sku": product.sku,
-        "enable_stock": 1 if product.enable_stock else 0, "is_inactive": 0 if product.is_active else 1,
+        "enable_stock": 1 if product.enable_stock else 0,
+        "is_active": 1 if product.is_active else 0,
+        "is_inactive": 0 if product.is_active else 1,
         "category": product.category, "revision": product.revision,
         "product_variations": [{"id": product.id, "name": "DUMMY", "variations": variations}],
     }
@@ -208,6 +210,20 @@ def invoice(sale_id: int, user: User = Depends(current_user), db: Session = Depe
     cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
     data = serialize_sale(sale, contact.name if contact else None, cashier)
     return {"success": True, "data": data}
+
+
+@router.patch("/income/pos/transactions/{sale_id}/mark")
+def mark_transaction(
+    sale_id: int,
+    payload: SaleMark,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    sale = mark_sale(db, user, get_sale(db, user.business_id, sale_id), payload)
+    db.commit()
+    contact = db.get(Contact, sale.contact_id)
+    cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
+    return {"success": True, "data": serialize_sale(sale, contact.name if contact else None, cashier)}
 
 
 @router.delete("/income/pos/transactions/{sale_id}")

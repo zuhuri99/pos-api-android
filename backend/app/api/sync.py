@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..core.db import get_db
 from ..models import ChangeLog, Contact, Location, Product, ProductVariation, Sale, SyncOperation, User
-from ..schemas import SaleCreate, SaleDelete, SyncPushRequest
-from ..services.sales import create_sale, serialize_sale, update_sale, void_sale
+from ..schemas import SaleCreate, SaleDelete, SaleMark, SyncPushRequest
+from ..services.sales import create_sale, mark_sale, serialize_sale, update_sale, void_sale
 from ..services.notifications import queue_transaction_notifications
 from .deps import authorize_sale_delete, current_user
 from .pos import product_payload
@@ -45,18 +45,23 @@ def push(
         if existing:
             results.append(existing.result)
             continue
-        if operation.action == "delete":
-            delete_payload = operation.payload
-            if not isinstance(delete_payload, SaleDelete):
-                raise ValueError("Payload penghapusan transaksi tidak valid.")
-            authorize_sale_delete(user, delete_payload.pin)
+        if operation.action in {"delete", "mark"}:
+            action_payload = operation.payload
             sale = db.scalar(select(Sale).where(
                 Sale.business_id == user.business_id,
                 Sale.client_transaction_id == str(operation.entity_id),
             ))
             if not sale:
-                raise ValueError("Transaksi yang akan dihapus belum tersedia di server.")
-            sale = void_sale(db, user, sale, delete_payload.reason)
+                raise ValueError("Transaksi belum tersedia di server.")
+            if operation.action == "delete":
+                if not isinstance(action_payload, SaleDelete):
+                    raise ValueError("Payload penghapusan transaksi tidak valid.")
+                authorize_sale_delete(user, action_payload.pin)
+                sale = void_sale(db, user, sale, action_payload.reason)
+            else:
+                if not isinstance(action_payload, SaleMark):
+                    raise ValueError("Payload penandaan transaksi tidak valid.")
+                sale = mark_sale(db, user, sale, action_payload)
         else:
             sale_payload = operation.payload
             if not isinstance(sale_payload, SaleCreate):
@@ -77,7 +82,7 @@ def push(
             entity_type="sale", entity_uuid=str(operation.entity_id), result=result,
         ))
         results.append(result)
-        if not user.is_admin:
+        if not user.is_admin and operation.action in {"create", "update", "delete"}:
             contact = db.get(Contact, sale.contact_id)
             notifications.append((
                 operation.action,

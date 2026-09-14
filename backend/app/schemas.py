@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -63,13 +63,26 @@ class SaleDelete(BaseModel):
     pin: str | None = Field(default=None, min_length=4, max_length=64, exclude=True)
 
 
+class SaleMark(BaseModel):
+    mark_type: Literal["wrong", "other"]
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_reason(self):
+        reason = (self.reason or "").strip()
+        if self.mark_type == "other" and len(reason) < 3:
+            raise ValueError("Alasan lainnya wajib diisi minimal 3 karakter.")
+        self.reason = "Transaksi salah" if self.mark_type == "wrong" else reason
+        return self
+
+
 class SyncOperationIn(BaseModel):
     operation_id: UUID
     entity: Literal["sale"]
-    action: Literal["create", "update", "delete"]
+    action: Literal["create", "update", "delete", "mark"]
     entity_id: UUID
     base_revision: int = 0
-    payload: SaleCreate | SaleDelete
+    payload: SaleCreate | SaleMark | SaleDelete
 
 
 class SyncPushRequest(BaseModel):

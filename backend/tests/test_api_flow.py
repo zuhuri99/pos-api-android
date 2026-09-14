@@ -146,6 +146,24 @@ def test_product_sale_and_idempotent_offline_sync():
         corrected_stock = client.get("/api/v1/pos-data/product-stock-report?location_id=1", headers=headers)
         assert corrected_stock.json()["data"][0]["stock"] == "9.0000"
 
+        invalid_mark = client.patch(
+            f"/api/v1/income/pos/transactions/{sale_id}/mark",
+            headers=headers,
+            json={"mark_type": "other", "reason": ""},
+        )
+        assert invalid_mark.status_code == 422
+
+        marked = client.patch(
+            f"/api/v1/income/pos/transactions/{sale_id}/mark",
+            headers=headers,
+            json={"mark_type": "other", "reason": "Perlu verifikasi pelanggan"},
+        )
+        assert marked.status_code == 200, marked.text
+        assert marked.json()["data"]["mark_type"] == "other"
+        assert marked.json()["data"]["mark_reason"] == "Perlu verifikasi pelanggan"
+        assert marked.json()["data"]["marked_by"] == 1
+        assert marked.json()["data"]["revision"] == 3
+
         delete_operation_id = str(uuid4())
         delete_body = {
             "device_id": "test-device",

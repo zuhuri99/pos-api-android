@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import PosLayout from "../../../layouts/PosLayout";
 import ListPagination from "../../../components/ListPagination";
 import TransactionDeleteDialog from "../components/TransactionDeleteDialog";
+import TransactionMarkDialog from "../components/TransactionMarkDialog";
 import { posApi } from "../api/posApi";
 import { getPosApiError } from "../posUtils";
 import { getActiveAccount } from "../../../utils/auth";
@@ -47,6 +48,9 @@ export default function TransactionList() {
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [markTarget, setMarkTarget] = useState(null);
+  const [marking, setMarking] = useState("");
+  const [markError, setMarkError] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState("10");
   const requiresDeletePin = !getActiveAccount()?.user?.is_superuser;
@@ -91,6 +95,23 @@ export default function TransactionList() {
     }
   };
 
+  const mark = async ({ markType, reason }) => {
+    const sale = markTarget;
+    if (!sale) return;
+    setMarking(String(sale.id));
+    setMarkError("");
+    try {
+      const result = await posApi.mark(sale.id, markType, reason);
+      const marked = result.data?.data || {};
+      setSales((current) => current.map((row) => String(row.id) === String(sale.id) ? { ...row, ...marked } : row));
+      setMarkTarget(null);
+    } catch (requestError) {
+      setMarkError(getPosApiError(requestError, "Transaksi gagal ditandai."));
+    } finally {
+      setMarking("");
+    }
+  };
+
   return (
     <PosLayout title="Daftar Transaksi">
       <div className="space-y-3 pb-24">
@@ -118,7 +139,7 @@ export default function TransactionList() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {visibleSales.map((sale) => (
-              <article key={`${sale.client_transaction_id || sale.id}-${sale.invoice_no}`} className="rounded-[24px] border border-white/80 bg-white p-4 shadow-sm">
+              <article key={`${sale.client_transaction_id || sale.id}-${sale.invoice_no}`} className={`rounded-[24px] border bg-white p-4 shadow-sm ${sale.mark_reason ? "border-amber-300 ring-2 ring-amber-100" : "border-white/80"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-base font-black text-slate-900">{sale.invoice_no}</p>
@@ -134,9 +155,11 @@ export default function TransactionList() {
                   <p className="text-base font-black text-blue-700">{rupiah(saleTotal(sale))}</p>
                 </div>
                 {sale.sync_state && sale.sync_state !== "synced" && <p className="mt-2 text-[10px] font-bold text-amber-700">Status sinkronisasi: {sale.sync_state}</p>}
-                <div className="mt-3 grid grid-cols-3 gap-2">
+                {sale.mark_reason && <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-extrabold text-amber-900">⚑ Ditandai: {sale.mark_reason}</p>}
+                <div className="mt-3 grid grid-cols-4 gap-2">
                   <button type="button" onClick={() => navigate(`/invoice/${sale.id}`)} className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5 text-xs font-extrabold text-slate-700">Lihat</button>
                   <button type="button" onClick={() => navigate(`/pos/${sale.id}/edit`)} className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2.5 text-xs font-extrabold text-blue-700">Edit</button>
+                  <button type="button" disabled={marking === String(sale.id)} onClick={() => { setMarkError(""); setMarkTarget(sale); }} className="rounded-xl border border-amber-300 bg-amber-50 px-1 py-2.5 text-xs font-extrabold text-amber-800 disabled:opacity-50">{marking === String(sale.id) ? "…" : "Tandai"}</button>
                   <button type="button" disabled={deleting === String(sale.id)} onClick={() => { setError(""); setDeleteTarget(sale); }} className="rounded-xl border border-red-200 bg-red-50 px-2 py-2.5 text-xs font-extrabold text-red-700 disabled:opacity-50">{deleting === String(sale.id) ? "…" : "Hapus"}</button>
                 </div>
               </article>
@@ -145,6 +168,7 @@ export default function TransactionList() {
         )}
       </div>
       {deleteTarget && <TransactionDeleteDialog sale={deleteTarget} requiresPin={requiresDeletePin} busy={Boolean(deleting)} error={error} onClose={() => { if (!deleting) setDeleteTarget(null); }} onConfirm={remove} />}
+      {markTarget && <TransactionMarkDialog sale={markTarget} busy={Boolean(marking)} error={markError} onClose={() => { if (!marking) setMarkTarget(null); }} onConfirm={mark} />}
     </PosLayout>
   );
 }

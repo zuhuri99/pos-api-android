@@ -16,12 +16,21 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
     contacts: [{ id: 1, name: "Umum" }],
     products: [{
       id: 1, name: "Produk", sku: "SKU-1", enable_stock: 1,
+      is_active: 1, is_inactive: 0,
       product_variations: [{ variations: [{
         id: 10, name: "DUMMY", sub_sku: "SKU-1", sell_price_inc_tax: "5000",
         variation_location_details: [{ location_id: 1, qty_available: "10" }],
       }] }],
+    }, {
+      id: 2, name: "Produk Nonaktif", sku: "SKU-2", enable_stock: 1,
+      is_active: 0, is_inactive: 1,
+      product_variations: [{ variations: [{
+        id: 20, name: "DUMMY", sub_sku: "SKU-2", sell_price_inc_tax: "7000",
+        variation_location_details: [{ location_id: 1, qty_available: "5" }],
+      }] }],
     }],
   });
+  assert.deepEqual((await store.searchLocalProducts({ per_page: 100 })).map((product) => product.id), [1]);
   await store.addInvoiceNumbers(["P1020260001"]);
   const invoice = await store.peekInvoiceNumber("2026-10-14 10:00:00");
   assert.equal(invoice, "P1020260001");
@@ -41,27 +50,36 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
     payments: [{ amount: 5000, method: "cash" }],
   }, "update", sale.client_transaction_id);
   assert.equal((await store.getLocalStock(1))[0].stock, "9");
+  const markedSale = await store.queueLocalSaleMark(sale.client_transaction_id, "other", "Perlu dicek ulang");
+  assert.equal(markedSale.mark_type, "other");
+  assert.equal(markedSale.mark_reason, "Perlu dicek ulang");
+  assert.equal((await store.getLocalStock(1))[0].stock, "9");
   await store.queueLocalSaleDelete(sale.client_transaction_id, "Salah input barang");
   assert.equal((await store.getLocalStock(1))[0].stock, "10");
   assert.equal((await store.listLocalSales()).length, 0);
   const operations = await store.pendingOperations();
-  assert.equal(operations.length, 3);
+  assert.equal(operations.length, 4);
   const syncStats = await store.offlineStats();
-  assert.equal(syncStats.queue.length, 3);
-  assert.equal(syncStats.queue[2].invoice_no, invoice);
+  assert.equal(syncStats.queue.length, 4);
+  assert.equal(syncStats.queue[2].action, "mark");
+  assert.equal(syncStats.queue[3].invoice_no, invoice);
   assert.equal(syncStats.recent.length, 1);
   assert.equal(syncStats.recent[0].sync_state, "pending_delete");
 
   await store.markOperationSynced(operations[0].operation_id, {
     server_id: 99, invoice_no: invoice, revision: 1,
   });
-  assert.equal((await store.pendingOperations()).length, 2);
+  assert.equal((await store.pendingOperations()).length, 3);
   await store.markOperationSynced(operations[1].operation_id, {
     server_id: 99, invoice_no: invoice, revision: 2,
   });
-  assert.equal((await store.pendingOperations()).length, 1);
+  assert.equal((await store.pendingOperations()).length, 2);
   await store.markOperationSynced(operations[2].operation_id, {
     server_id: 99, invoice_no: invoice, revision: 3,
+  });
+  assert.equal((await store.pendingOperations()).length, 1);
+  await store.markOperationSynced(operations[3].operation_id, {
+    server_id: 99, invoice_no: invoice, revision: 4,
   });
   assert.equal((await store.pendingOperations()).length, 0);
   assert.equal(await store.getLocalSale(sale.client_transaction_id), null);

@@ -435,6 +435,18 @@ export default function InvoiceDetails() {
             </div>
           )}
 
+          {invoice.mark_reason && (
+            <div className="mb-4 border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <strong className="block font-black">⚑ Transaksi ditandai</strong>
+              <span className="text-xs font-semibold">{invoice.mark_reason}</span>
+              {invoice.marked_at && (
+                <span className="mt-1 block text-[10px] text-amber-800">
+                  {formatTanggal(invoice.marked_at)}
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4 text-sm mt-4 p-4 bg-[#f3f2f1] border border-gray-200">
             <div>
               <span className="block text-[10px] uppercase text-gray-500 font-semibold mb-1">
