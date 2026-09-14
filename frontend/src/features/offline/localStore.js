@@ -294,6 +294,39 @@ export async function takeInvoiceNumber(dateValue) {
   }
 }
 
+export async function peekInvoiceNumber(dateValue) {
+  const date = new Date(String(dateValue).replace(" ", "T"));
+  const period = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const db = await nativeDb();
+  if (!db) {
+    return readWeb().invoices
+      .filter((item) => item.period === period && !item.used)
+      .sort((a, b) => a.invoice_no.localeCompare(b.invoice_no))[0]?.invoice_no || "";
+  }
+  const result = await db.query(
+    "SELECT invoice_no FROM invoice_numbers WHERE period=? AND used=0 ORDER BY invoice_no LIMIT 1",
+    [period],
+  );
+  return result.values?.[0]?.invoice_no || "";
+}
+
+async function claimInvoiceNumber(db, data, invoiceNo) {
+  if (data) {
+    const row = data.invoices.find((item) => item.invoice_no === invoiceNo && !item.used);
+    if (!row) throw new Error("Nomor invoice sudah digunakan. Muat ulang POS untuk mengambil nomor berikutnya.");
+    row.used = 1;
+    return;
+  }
+  const claimed = await db.run(
+    "UPDATE invoice_numbers SET used=1 WHERE invoice_no=? AND used=0",
+    [invoiceNo],
+    false,
+  );
+  if (!claimed.changes?.changes) {
+    throw new Error("Nomor invoice sudah digunakan. Muat ulang POS untuk mengambil nomor berikutnya.");
+  }
+}
+
 export async function saveLocalSale(payload, action = "create", localId = null) {
   const entityId = localId || payload.client_transaction_id || crypto.randomUUID();
   const operationId = crypto.randomUUID();
@@ -302,6 +335,7 @@ export async function saveLocalSale(payload, action = "create", localId = null) 
   if (!db) {
     const data = readWeb();
     const previous = data.sales.find((row) => row.local_id === entityId);
+    if (!previous && action === "create") await claimInvoiceNumber(null, data, stored.invoice_no);
     if (previous) await restoreSaleStock(null, data, previous.payload);
     await applySaleStock(null, data, stored);
     data.sales = [...data.sales.filter((row) => row.local_id !== entityId), { local_id: entityId, server_id: previous?.server_id || null, invoice_no: stored.invoice_no, transaction_date: stored.transaction_date, state: "pending", payload: stored }];
@@ -311,6 +345,7 @@ export async function saveLocalSale(payload, action = "create", localId = null) 
   await db.beginTransaction();
   try {
     const previousRow = (await db.query("SELECT payload FROM sales WHERE local_id=? LIMIT 1", [entityId])).values?.[0];
+    if (!previousRow && action === "create") await claimInvoiceNumber(db, null, stored.invoice_no);
     if (previousRow) await restoreSaleStock(db, null, JSON.parse(previousRow.payload));
     await applySaleStock(db, null, stored);
     await db.run("INSERT OR REPLACE INTO sales(local_id,server_id,invoice_no,transaction_date,state,payload,last_error) VALUES (?,COALESCE((SELECT server_id FROM sales WHERE local_id=?),NULL),?,?,?,?,NULL)", [entityId, entityId, stored.invoice_no, stored.transaction_date, "pending", JSON.stringify(stored)], false);
@@ -426,11 +461,34 @@ export async function markOperationFailed(operationId, message) {
 
 export async function offlineStats() {
   const operations = await pendingOperations();
-  const sales = await listLocalSales();
+  const db = await nativeDb();
+  const rawSales = !db
+    ? readWeb().sales
+    : (await db.query("SELECT local_id,payload,state,server_id,last_error FROM sales ORDER BY transaction_date DESC")).values || [];
+  const sales = rawSales.map((row) => ({
+    ...(typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload),
+    local_id: row.local_id,
+    id: row.server_id || row.local_id,
+    sync_state: row.state,
+    sync_error: row.last_error,
+  })).sort((a, b) => String(b.transaction_date || "").localeCompare(String(a.transaction_date || "")));
+  const saleById = new Map(sales.map((sale) => [String(sale.client_transaction_id || sale.local_id), sale]));
   return {
     pending: operations.length,
     failed: sales.filter((row) => row.sync_state === "failed").length,
     lastSync: await getMeta("last_sync"),
     cursor: Number(await getMeta("cursor") || 0),
+    queue: operations.map((operation) => {
+      const sale = saleById.get(String(operation.entity_id));
+      return {
+        operation_id: operation.operation_id,
+        action: operation.action,
+        invoice_no: sale?.invoice_no || operation.payload?.invoice_no || "-",
+        transaction_date: sale?.transaction_date || operation.created_at,
+        status: operation.last_error ? "failed" : "pending",
+        error: operation.last_error || "",
+      };
+    }),
+    recent: sales.slice(0, 10),
   };
 }

@@ -3,11 +3,11 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { logout } from "../utils/auth";
 
 const links = [
-  ["/pos", "Kasir"],
-  ["/transactions", "Transaksi"],
-  ["/admin/products", "Produk"],
-  ["/sync", "Sinkronisasi"],
-  ["/settings/printer", "Printer"],
+  { path: "/transactions", label: "Transaksi", icon: "M4 5h16M4 12h16M4 19h10" },
+  { path: "/products", label: "Produk", icon: "M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Zm8 4.5 8-4.5M12 12 4 7.5M12 12v9" },
+  { path: "/pos", label: "POS", center: true, icon: "M6 7h12l1 14H5L6 7Zm3 0V5a3 3 0 0 1 6 0v2M9 12h6" },
+  { path: "/sync", label: "Sinkron", icon: "M20 7h-6V1M4 17h6v6M19 12a7 7 0 0 0-12-5L4 10m1 2a7 7 0 0 0 12 5l3-3" },
+  { path: "/settings/printer", label: "Printer", icon: "M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6v-7Z" },
 ];
 
 export default function PosLayout({ title, children }) {
@@ -18,7 +18,7 @@ export default function PosLayout({ title, children }) {
     navigate("/login", { replace: true });
   };
   return (
-    <div className="min-h-[100dvh] bg-slate-100 pb-20">
+    <div className="min-h-[100dvh] bg-[radial-gradient(circle_at_top,#e0f2fe_0,#f1f5f9_36%,#f8fafc_100%)] pb-28">
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div className="flex min-w-0 items-center gap-2.5">
           <img src="/asas-pos-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
@@ -27,10 +27,20 @@ export default function PosLayout({ title, children }) {
         <button type="button" onClick={signOut} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">Keluar</button>
       </header>
       <main className="mx-auto max-w-4xl p-3">{children}</main>
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white px-1 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-2 shadow-2xl">
-        {links.map(([path, label]) => (
-          <NavLink key={path} to={path} className={`rounded-lg px-1 py-2 text-center text-[11px] font-extrabold ${location.pathname === path || (path === "/pos" && location.pathname.startsWith("/pos/")) ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>{label}</NavLink>
-        ))}
+      <nav className="liquid-glass-nav liquid-nav-safe-bottom fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 items-end rounded-[28px] border border-white/70 bg-white/65 px-2 pt-2 shadow-[0_18px_55px_rgba(15,23,42,0.22),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-2xl sm:inset-x-auto sm:left-1/2 sm:w-[520px] sm:-translate-x-1/2">
+        {links.map(({ path, label, icon, center }) => {
+          const active = location.pathname === path
+            || (path === "/pos" && location.pathname.startsWith("/pos/"))
+            || (path === "/products" && location.pathname.startsWith("/admin/products"));
+          return (
+            <NavLink key={path} to={path} aria-label={label} className={`${center ? "-mt-7" : ""} flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[10px] font-extrabold transition active:scale-95 ${active ? "text-blue-700" : "text-slate-500"}`}>
+              <span className={`flex items-center justify-center ${center ? "h-14 w-14 rounded-full border border-white/80 bg-gradient-to-b from-sky-400 to-blue-700 text-white shadow-[0_10px_28px_rgba(2,132,199,0.45),inset_0_1px_1px_rgba(255,255,255,0.6)]" : `h-8 w-10 rounded-xl ${active ? "bg-blue-100/80" : "bg-white/30"}`}`}>
+                <svg className={center ? "h-7 w-7" : "h-5 w-5"} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d={icon} /></svg>
+              </span>
+              <span className="truncate">{label}</span>
+            </NavLink>
+          );
+        })}
       </nav>
     </div>
   );

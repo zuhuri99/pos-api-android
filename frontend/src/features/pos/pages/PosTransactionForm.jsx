@@ -8,6 +8,7 @@ import { isNative, scanProductSku } from "../../../platform/native";
 import {
   openCashDrawer,
 } from "../../../platform/thermalPrinter";
+import { syncNow } from "../../offline/syncEngine";
 import { getActiveAccount } from "../../../utils/auth";
 import { posApi } from "../api/posApi";
 import { paymentAliasLabel } from "../paymentAliases";
@@ -64,11 +65,6 @@ const fromDateTimeInput = (value) => {
   return normalized.length === 16 ? `${normalized}:00` : normalized;
 };
 
-const QRIS_TYPES = [
-  { value: "asta griya saka", label: "Asta Griya Saka" },
-  { value: "dewan floor", label: "Dewan Floor" },
-];
-
 export default function PosTransactionForm() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -102,22 +98,13 @@ export default function PosTransactionForm() {
   const [drawerFailed, setDrawerFailed] = useState(false);
   const [drawerConfirmOpen, setDrawerConfirmOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [qrisOpen, setQrisOpen] = useState(false);
-  const [qrisType, setQrisType] = useState("asta griya saka");
-  const [qrisPaymentMethod, setQrisPaymentMethod] = useState("bank_transfer");
-  const [qrisUrl, setQrisUrl] = useState("");
-  const [qrisBusy, setQrisBusy] = useState(false);
-  const [qrisError, setQrisError] = useState("");
   const [error, setError] = useState("");
   const [showMore, setShowMore] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const productSearchSequence = useRef(0);
-  const invoiceManuallyEdited = useRef(false);
-  const transactionYear = form.transaction_date?.slice(0, 4) || "";
-  const invoiceOwner = isSuperuser
-    ? (sourceUser === "user2" ? user2InvoiceOwner : "asas")
-    : username;
-
+  const transactionPeriod = form.transaction_date?.slice(0, 7) || "";
   const total = useMemo(() => {
     const subtotal = form.products.reduce((sum, line) => {
       const gross = asNumber(line.quantity) * asNumber(line.unit_price);
@@ -184,14 +171,13 @@ export default function PosTransactionForm() {
 
   useEffect(() => {
     if (isEdit) return undefined;
-    const year = transactionYear;
-    if (!/^\d{4}$/.test(year)) {
+    const period = transactionPeriod;
+    if (!/^\d{4}-\d{2}$/.test(period)) {
       setGeneratingInvoice(false);
       return undefined;
     }
 
     let active = true;
-    invoiceManuallyEdited.current = false;
     setForm((current) => ({
       ...current,
       invoice_no: "",
@@ -201,8 +187,7 @@ export default function PosTransactionForm() {
       .then((invoiceNumber) => {
         if (!active) return;
         setForm((current) => (
-          !invoiceManuallyEdited.current &&
-          current.transaction_date?.slice(0, 4) === year
+          current.transaction_date?.slice(0, 7) === period
             ? { ...current, invoice_no: invoiceNumber }
             : current
         ));
@@ -224,7 +209,7 @@ export default function PosTransactionForm() {
       });
 
     return () => { active = false; };
-  }, [form.transaction_date, isEdit, transactionYear]);
+  }, [form.transaction_date, isEdit, transactionPeriod]);
 
   useEffect(() => {
     let active = true;
@@ -301,7 +286,20 @@ export default function PosTransactionForm() {
     };
     load();
     return () => { active = false; };
-  }, [id, isEdit, sourceUser]);
+  }, [id, isEdit, refreshKey, sourceUser]);
+
+  const refreshPos = async () => {
+    setRefreshing(true);
+    setError("");
+    try {
+      await syncNow();
+      setRefreshKey((value) => value + 1);
+    } catch (requestError) {
+      setError(getPosApiError(requestError, "Data POS gagal diperbarui."));
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     const query = productQuery.trim();
@@ -355,10 +353,6 @@ export default function PosTransactionForm() {
     setProductQuery("");
     setForm(emptyForm());
   };
-
-  useEffect(() => {
-    setQrisType(invoiceOwner === "asas" ? "asta griya saka" : "dewan floor");
-  }, [invoiceOwner]);
 
   const addProduct = (product) => {
     const productWithStock = applyPosStock(product, stockIndex);
@@ -456,59 +450,6 @@ export default function PosTransactionForm() {
       setDrawerBusy(false);
       setDrawerConfirmOpen(false);
     }
-  };
-
-  const loadQris = async (selectedType = qrisType) => {
-    if (total <= 0) {
-      setQrisError("Nominal transaksi tidak valid.");
-      return;
-    }
-    setQrisBusy(true);
-    setQrisError("");
-    setQrisUrl("");
-    try {
-      const response = await posApi.qrisUrl({
-        qris_type: selectedType,
-        amount: Math.round(total),
-      });
-      const url = response.data?.data?.url;
-      if (!url) throw new Error("URL pembayaran QRIS tidak tersedia.");
-      setQrisUrl(url);
-    } catch (requestError) {
-      setQrisError(getPosApiError(requestError, "QRIS gagal dibuat."));
-    } finally {
-      setQrisBusy(false);
-    }
-  };
-
-  const openQrisPayment = () => {
-    const detectedMethod = paymentMethods.find((method) => {
-      const name = method.name || method.method;
-      return paymentAliasLabel(sourceUser, name, method.label || name).toLowerCase().includes("qris");
-    }
-    ) || paymentMethods.find((method) => (method.name || method.method) === "bank_transfer") || paymentMethods[0];
-    setQrisPaymentMethod(detectedMethod?.name || detectedMethod?.method || "bank_transfer");
-    setQrisOpen(true);
-    loadQris();
-  };
-
-  const confirmQrisPayment = () => {
-    const amount = paymentRemaining > 0 ? paymentRemaining : total;
-    setForm((current) => {
-      const isUntouchedCash = current.payments.length === 1 &&
-        current.payments[0]?.method === "cash" &&
-        asNumber(current.payments[0]?.amount) === total;
-      const qrisPayment = { amount, method: qrisPaymentMethod, note: `QRIS ${qrisType}`, paid_on: localTransactionDate() };
-      return {
-        ...current,
-        payments: isUntouchedCash ? [qrisPayment] : [...current.payments, qrisPayment],
-      };
-    });
-    setQrisOpen(false);
-    setQrisUrl("");
-    setPaymentOpen(true);
-    setDrawerFailed(false);
-    setDrawerMessage("Pembayaran QRIS berhasil ditambahkan.");
   };
 
   const selectProduct = (product) => {
@@ -722,17 +663,10 @@ export default function PosTransactionForm() {
                     <input
                       type="text"
                       value={form.invoice_no || ""}
-                      readOnly={isEdit}
-                      onChange={(event) => {
-                        invoiceManuallyEdited.current = true;
-                        setForm((current) => ({
-                          ...current,
-                          invoice_no: event.target.value.toUpperCase(),
-                        }));
-                      }}
-                      placeholder={generatingInvoice ? "Memeriksa nomor terakhir…" : "Contoh: PAS20265000"}
+                      readOnly
+                      placeholder={generatingInvoice ? "Memeriksa nomor berikutnya…" : "Contoh: P1020260001"}
                       className="h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-2 pr-8 text-xs font-extrabold uppercase outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 read-only:bg-slate-100"
-                      maxLength={100}
+                      maxLength={11}
                       required
                     />
                     {generatingInvoice && (
@@ -757,9 +691,10 @@ export default function PosTransactionForm() {
             </div>
 
             <div className="relative z-40 min-w-0 rounded-[22px] border border-white/80 bg-white/80 p-3 shadow-sm backdrop-blur-xl sm:p-4">
-              <label className="text-xs font-bold text-slate-600" htmlFor="pos-product-search">
-                Cari produk atau SKU
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-xs font-bold text-slate-600" htmlFor="pos-product-search">Cari produk atau SKU</label>
+                <button type="button" onClick={refreshPos} disabled={refreshing} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-extrabold text-blue-700 disabled:opacity-50">{refreshing ? "Memperbarui…" : "↻ Refresh"}</button>
+              </div>
               <div className="relative mt-1">
                 <div className="flex min-w-0 gap-2">
                   <div className="relative min-w-0 flex-1">
@@ -902,7 +837,7 @@ export default function PosTransactionForm() {
 
               <div className="grid min-w-0 grid-cols-2 gap-2">
                 <button type="button" onClick={addPayment} className="min-w-0 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs font-extrabold text-blue-700">+ Metode lain</button>
-                <button type="button" onClick={openQrisPayment} className="min-w-0 rounded-2xl bg-gradient-to-b from-violet-500 to-indigo-700 px-3 py-3 text-xs font-extrabold text-white shadow-lg">Bayar QRIS</button>
+                <button type="button" disabled title="QRIS sementara belum tersedia" className="min-w-0 cursor-not-allowed rounded-2xl bg-slate-300 px-3 py-3 text-xs font-extrabold text-slate-500">Bayar QRIS · Segera hadir</button>
               </div>
             </div>
 
@@ -913,42 +848,6 @@ export default function PosTransactionForm() {
                 <div className="text-right"><span className="block text-slate-400">{changeReturn > 0 ? "Kembalian" : "Sisa"}</span><strong className={paymentRemaining > 0 ? "text-amber-300" : "text-emerald-300"}>{formatPosCurrency(changeReturn || paymentRemaining)}</strong></div>
               </div>
               <button type="button" onClick={() => setPaymentOpen(false)} className="w-full rounded-2xl bg-[#0067b8] px-4 py-3 text-sm font-extrabold text-white">Selesai</button>
-            </footer>
-          </section>
-        </div>
-      )}
-
-      {qrisOpen && (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) { setQrisOpen(false); setQrisUrl(""); } }}>
-          <section className="flex max-h-[94dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl sm:max-w-xl sm:rounded-[28px]">
-            <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-violet-600">QRIS</p><h2 className="text-lg font-black text-slate-900">{formatPosCurrency(total)}</h2></div>
-              <button type="button" onClick={() => { setQrisOpen(false); setQrisUrl(""); }} className="h-9 w-9 rounded-full bg-slate-100 text-xl font-bold text-slate-500">×</button>
-            </header>
-
-            <div className="grid min-w-0 grid-cols-2 gap-2 border-b border-slate-200 p-3">
-              <label className="min-w-0 text-[10px] font-bold text-slate-500">QRIS tujuan
-                <select value={qrisType} onChange={(event) => { setQrisType(event.target.value); loadQris(event.target.value); }} className="mt-1 h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold">
-                  {QRIS_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-                </select>
-              </label>
-              <label className="min-w-0 text-[10px] font-bold text-slate-500">Catat sebagai
-                <select value={qrisPaymentMethod} onChange={(event) => setQrisPaymentMethod(event.target.value)} className="mt-1 h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold">
-                  <option value="cash">{paymentAliasLabel(sourceUser, "cash", "Cash")}</option>
-                  {paymentMethods.filter((method) => (method.name || method.method) !== "cash").map((method) => { const name = method.name || method.method; return <option key={name} value={name}>{paymentAliasLabel(sourceUser, name, method.label || name)}</option>; })}
-                </select>
-              </label>
-            </div>
-
-            <div className="relative min-h-[48dvh] min-w-0 flex-1 bg-slate-100">
-              {qrisBusy && <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/90"><span className="h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" /><p className="text-xs font-bold text-slate-600">Membuat QRIS…</p></div>}
-              {qrisError && <div className="flex h-full min-h-[48dvh] flex-col items-center justify-center gap-3 p-6 text-center"><p className="text-sm font-bold text-red-600">{qrisError}</p><button type="button" onClick={() => loadQris()} className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white">Coba lagi</button></div>}
-              {qrisUrl && !qrisError && <iframe title="Pembayaran QRIS" src={qrisUrl} className="h-[55dvh] w-full min-w-0 border-0 bg-white" sandbox="allow-forms allow-same-origin allow-scripts" />}
-            </div>
-
-            <footer className="grid grid-cols-[1fr_1.5fr] gap-2 border-t border-slate-200 bg-white p-3">
-              <button type="button" onClick={() => loadQris()} disabled={qrisBusy} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-extrabold text-slate-700 disabled:opacity-50">Muat ulang</button>
-              <button type="button" onClick={confirmQrisPayment} disabled={!qrisUrl || qrisBusy} className="rounded-2xl bg-emerald-600 px-3 py-3 text-xs font-extrabold text-white disabled:opacity-50">Konfirmasi sudah dibayar</button>
             </footer>
           </section>
         </div>

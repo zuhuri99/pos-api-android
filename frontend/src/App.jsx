@@ -9,6 +9,7 @@ const Login = lazy(() => import("./pages/PosLogin"));
 const PosTransactionForm = lazy(() => import("./features/pos/pages/PosTransactionForm"));
 const InvoiceDetails = lazy(() => import("./pages/InvoiceDetails"));
 const ProductTransfer = lazy(() => import("./features/products/ProductTransfer"));
+const ProductList = lazy(() => import("./features/products/ProductList"));
 const SyncStatus = lazy(() => import("./features/offline/SyncStatus"));
 const ThermalPrinterSettings = lazy(() => import("./pages/ThermalPrinterSettings"));
 const TransactionList = lazy(() => import("./features/pos/pages/TransactionList"));
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/pos/:id/edit" element={<ProtectedRoute><PosTransactionForm /></ProtectedRoute>} />
           <Route path="/invoice/:id" element={<ProtectedRoute><InvoiceDetails /></ProtectedRoute>} />
           <Route path="/transactions" element={<ProtectedRoute><TransactionList /></ProtectedRoute>} />
+          <Route path="/products" element={<ProtectedRoute><ProductList /></ProtectedRoute>} />
           <Route path="/products/transfer" element={<ProtectedRoute><ProductTransfer /></ProtectedRoute>} />
           <Route path="/admin/products" element={<ProtectedRoute><ProductTransfer /></ProtectedRoute>} />
           <Route path="/sync" element={<ProtectedRoute><SyncStatus /></ProtectedRoute>} />

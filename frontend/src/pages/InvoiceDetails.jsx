@@ -3,6 +3,7 @@ import { isNative } from "../platform/native";
 import {
   getThermalPrinterSettings,
   printThermalReceipt,
+  saveThermalPrinterSettings,
 } from "../platform/thermalPrinter";
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
@@ -125,6 +126,8 @@ export default function InvoiceDetails() {
   const autoPrintAttempted = useRef(false);
   const [thermalBusy, setThermalBusy] = useState(false);
   const [thermalStatus, setThermalStatus] = useState("");
+  const [printerChoiceOpen, setPrinterChoiceOpen] = useState(false);
+  const [printerSettings, setPrinterSettings] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
@@ -227,13 +230,33 @@ export default function InvoiceDetails() {
     await savePdf(pdf, `Nota-${invoice.invoice_no}.pdf`, print);
   };
 
-  const handlePrint = async () => {
+  const requestPrint = async () => {
+    if (!isNative) {
+      await handlePrint();
+      return;
+    }
+    setThermalStatus("");
+    try {
+      setPrinterSettings(await getThermalPrinterSettings());
+      setPrinterChoiceOpen(true);
+    } catch (printError) {
+      setThermalStatus(printError.message || "Pengaturan printer tidak dapat dibaca.");
+    }
+  };
+
+  const handlePrint = async (mode) => {
     if (isNative) {
       setThermalBusy(true);
       setThermalStatus("");
       try {
+        const currentSettings = printerSettings || await getThermalPrinterSettings();
+        const selectedMode = mode || currentSettings.mode;
+        if (selectedMode === "lan" && !currentSettings.lanHost?.trim()) throw new Error("Alamat printer LAN/WiFi belum diatur.");
+        if (selectedMode === "bluetooth" && !currentSettings.bluetoothAddress?.trim()) throw new Error("Printer Bluetooth belum dipilih di Pengaturan Printer.");
+        await saveThermalPrinterSettings({ ...currentSettings, mode: selectedMode });
+        setPrinterChoiceOpen(false);
         await printThermalReceipt(await getThermalReceiptData());
-        setThermalStatus("Nota berhasil dikirim ke printer thermal.");
+        setThermalStatus(`Nota berhasil dikirim melalui ${selectedMode === "lan" ? "LAN/WiFi" : "Bluetooth"}.`);
       } catch (printError) {
         setThermalStatus(printError.message || "Printer thermal tidak dapat dihubungi.");
         throw printError;
@@ -303,10 +326,9 @@ export default function InvoiceDetails() {
       try {
         const settings = await getThermalPrinterSettings();
         if (!settings.autoPrint || !active) return;
-        setThermalBusy(true);
-        setThermalStatus("Mencetak nota secara otomatis…");
-        await printThermalReceipt(await getThermalReceiptData());
-        if (active) setThermalStatus("Nota berhasil dicetak otomatis.");
+        setPrinterSettings(settings);
+        setThermalStatus("Pilih koneksi printer untuk melanjutkan cetak otomatis.");
+        setPrinterChoiceOpen(true);
       } catch (printError) {
         if (active) setThermalStatus(printError.message || "Cetak otomatis gagal. Gunakan tombol cetak ulang.");
       } finally {
@@ -884,7 +906,7 @@ export default function InvoiceDetails() {
                 Simpan PDF
               </button>
               <button
-                onClick={() => handlePrint().catch(() => {})}
+                onClick={() => requestPrint().catch(() => {})}
                 disabled={thermalBusy}
                 className="flex-1 py-2 text-xs font-semibold bg-[#0067b8] text-white hover:bg-[#005a9e] disabled:opacity-50"
               >
@@ -892,6 +914,19 @@ export default function InvoiceDetails() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {printerChoiceOpen && isNative && (
+        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !thermalBusy) setPrinterChoiceOpen(false); }}>
+          <section className="w-full max-w-md rounded-t-[28px] border border-white/70 bg-white/95 p-5 shadow-2xl backdrop-blur-2xl sm:rounded-[28px]">
+            <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-600">Konfirmasi cetak</p><h2 className="mt-1 text-xl font-black text-slate-900">Pilih koneksi printer</h2><p className="mt-1 text-xs text-slate-500">Nota {invoice.invoice_no} akan dikirim ke printer yang dipilih.</p></div><button type="button" disabled={thermalBusy} onClick={() => setPrinterChoiceOpen(false)} className="h-9 w-9 rounded-full bg-slate-100 text-xl font-bold text-slate-500">×</button></div>
+            <div className="mt-5 grid gap-3">
+              <button type="button" disabled={thermalBusy || !printerSettings?.lanHost} onClick={() => handlePrint("lan").catch(() => {})} className="flex items-center justify-between rounded-2xl border border-sky-200 bg-sky-50 p-4 text-left disabled:opacity-40"><span><strong className="block text-sm text-sky-900">LAN / WiFi</strong><span className="mt-1 block text-xs text-sky-700">{printerSettings?.lanHost || "Belum diatur"}:{printerSettings?.lanPort || 9100}</span></span><span className="text-xl">›</span></button>
+              <button type="button" disabled={thermalBusy || !printerSettings?.bluetoothAddress} onClick={() => handlePrint("bluetooth").catch(() => {})} className="flex items-center justify-between rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-left disabled:opacity-40"><span><strong className="block text-sm text-indigo-900">Bluetooth</strong><span className="mt-1 block text-xs text-indigo-700">{printerSettings?.bluetoothName || printerSettings?.bluetoothAddress || "Belum dipilih"}</span></span><span className="text-xl">›</span></button>
+            </div>
+            <button type="button" onClick={() => navigate("/settings/printer")} className="mt-4 w-full rounded-xl px-3 py-2 text-xs font-bold text-slate-500">Buka pengaturan printer</button>
+          </section>
         </div>
       )}
 

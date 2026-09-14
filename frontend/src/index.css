@@ -23,6 +23,11 @@ body {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
 
+.liquid-glass-nav {
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+}
+
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .liquid-glass-nav {
     background: rgba(255, 255, 255, 0.94);

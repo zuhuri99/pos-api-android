@@ -23,8 +23,9 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
     }],
   });
   await store.addInvoiceNumbers(["P1020260001"]);
-  const invoice = await store.takeInvoiceNumber("2026-10-14 10:00:00");
+  const invoice = await store.peekInvoiceNumber("2026-10-14 10:00:00");
   assert.equal(invoice, "P1020260001");
+  assert.equal(await store.peekInvoiceNumber("2026-10-14 10:00:00"), "P1020260001");
 
   const sale = await store.saveLocalSale({
     invoice_no: invoice, location_id: 1, contact_id: 1,
@@ -32,6 +33,7 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
     products: [{ product_id: 1, variation_id: 10, quantity: 2, unit_price: 5000 }],
     payments: [{ amount: 10000, method: "cash" }],
   });
+  assert.equal(await store.peekInvoiceNumber("2026-10-14 10:00:00"), "");
   assert.equal((await store.getLocalStock(1))[0].stock, "8");
   await store.saveLocalSale({
     ...sale,
@@ -44,6 +46,11 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
   assert.equal((await store.listLocalSales()).length, 0);
   const operations = await store.pendingOperations();
   assert.equal(operations.length, 3);
+  const syncStats = await store.offlineStats();
+  assert.equal(syncStats.queue.length, 3);
+  assert.equal(syncStats.queue[2].invoice_no, invoice);
+  assert.equal(syncStats.recent.length, 1);
+  assert.equal(syncStats.recent[0].sync_state, "pending_delete");
 
   await store.markOperationSynced(operations[0].operation_id, {
     server_id: 99, invoice_no: invoice, revision: 1,

@@ -9,7 +9,7 @@ import {
   queueLocalSaleDelete,
   saveLocalSale,
   searchLocalProducts,
-  takeInvoiceNumber,
+  peekInvoiceNumber,
 } from "../../offline/localStore";
 import { replenishInvoices, syncNow } from "../../offline/syncEngine";
 
@@ -75,10 +75,10 @@ export const posApi = {
     }
   },
   async nextInvoice(transactionDate) {
-    let number = await takeInvoiceNumber(transactionDate);
+    let number = await peekInvoiceNumber(transactionDate);
     if (!number && navigator.onLine) {
       await replenishInvoices(transactionDate);
-      number = await takeInvoiceNumber(transactionDate);
+      number = await peekInvoiceNumber(transactionDate);
     }
     if (!number) throw new Error("Persediaan nomor invoice offline habis. Hubungkan internet untuk mengambil nomor baru.");
     return number;

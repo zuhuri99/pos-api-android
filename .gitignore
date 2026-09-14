@@ -1,5 +1,6 @@
 .env
 .venv/
+.tools/
 __pycache__/
 .pytest_cache/
 *.pyc
@@ -8,4 +9,4 @@ node_modules/
 dist/
 android/.gradle/
 android/**/build/
-
+artifacts/
