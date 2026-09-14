@@ -43,7 +43,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="POS API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="ASAS POS API", version="0.1.0", lifespan=lifespan)
 settings = get_settings()
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(

@@ -38,8 +38,13 @@ export default function PosLogin() {
     <main className="flex min-h-[100dvh] items-center justify-center bg-slate-100 p-5">
       <form onSubmit={submit} className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
         <div className="mb-6">
-          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-blue-600">POS Offline</p>
-          <h1 className="mt-2 text-2xl font-black text-slate-900">Masuk ke kasir</h1>
+          <div className="flex items-center gap-3">
+            <img src="/asas-pos-logo.png" alt="Logo ASAS POS" className="h-14 w-14 object-contain" />
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-blue-600">ASAS POS</p>
+              <h1 className="mt-1 text-2xl font-black text-slate-900">Masuk ke kasir</h1>
+            </div>
+          </div>
           <p className="mt-1 text-sm text-slate-500">Login pertama memerlukan koneksi internet.</p>
         </div>
         {error && <div className="mb-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}

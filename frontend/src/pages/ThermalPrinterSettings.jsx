@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import MobileLayout from "../layouts/MobileLayout";
+import PosLayout from "../layouts/PosLayout";
 import { isNative } from "../platform/native";
 import {
   DEFAULT_THERMAL_SETTINGS,
@@ -74,7 +74,7 @@ export default function ThermalPrinterSettings() {
   };
 
   return (
-    <MobileLayout title="Printer Thermal">
+    <PosLayout title="Printer Thermal">
       <div className="mx-auto max-w-2xl space-y-4 pb-24">
         {!isNative && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Pengaturan printer langsung hanya aktif di APK Android.</div>}
         {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
@@ -158,6 +158,6 @@ export default function ThermalPrinterSettings() {
           </fieldset>
         </section>
       </div>
-    </MobileLayout>
+    </PosLayout>
   );
 }

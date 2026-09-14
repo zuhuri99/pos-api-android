@@ -1,6 +1,6 @@
 {
 	"appId": "id.pos.mobile",
-	"appName": "POS Offline",
+	"appName": "ASAS POS",
 	"webDir": "dist",
 	"server": {
 		"androidScheme": "https",

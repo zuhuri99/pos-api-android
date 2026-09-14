@@ -1,4 +1,4 @@
-# Arsitektur POS Offline
+# Arsitektur ASAS POS
 
 ## Keputusan teknologi
 

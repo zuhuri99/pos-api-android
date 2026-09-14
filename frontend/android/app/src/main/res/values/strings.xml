@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Finance</string>
-    <string name="title_activity_main">Finance</string>
+    <string name="app_name">ASAS POS</string>
+    <string name="title_activity_main">ASAS POS</string>
     <string name="package_name">id.pos.mobile</string>
     <string name="custom_url_scheme">id.pos.mobile</string>
 </resources>

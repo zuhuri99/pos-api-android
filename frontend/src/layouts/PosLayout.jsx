@@ -19,7 +19,10 @@ export default function PosLayout({ title, children }) {
   return (
     <div className="min-h-[100dvh] bg-slate-100 pb-20">
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">POS Offline</p><h1 className="text-lg font-black text-slate-900">{title}</h1></div>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <img src="/asas-pos-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
+          <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">ASAS POS</p><h1 className="truncate text-lg font-black text-slate-900">{title}</h1></div>
+        </div>
         <button type="button" onClick={signOut} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">Keluar</button>
       </header>
       <main className="mx-auto max-w-4xl p-3">{children}</main>

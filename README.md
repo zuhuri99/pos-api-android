@@ -1,4 +1,4 @@
-# POS Offline
+# ASAS POS
 
 POS mandiri dengan FastAPI/PostgreSQL 16 dan aplikasi Android React/Capacitor. UI selalu membaca dan menulis SQLite lokal; backend disinkronkan saat koneksi tersedia.
 
