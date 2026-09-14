@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..core.db import get_db
 from ..models import ChangeLog, Contact, Location, Product, ProductVariation, Sale, SyncOperation, User
 from ..schemas import SaleCreate, SaleDelete, SyncPushRequest
-from ..services.sales import create_sale, update_sale, void_sale
+from ..services.sales import create_sale, serialize_sale, update_sale, void_sale
+from ..services.notifications import queue_transaction_notifications
 from .deps import authorize_sale_delete, current_user
 from .pos import product_payload
 
@@ -30,8 +31,14 @@ def sync_bootstrap(user: User = Depends(current_user), db: Session = Depends(get
 
 
 @router.post("/push")
-def push(payload: SyncPushRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def push(
+    payload: SyncPushRequest,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     results = []
+    notifications = []
     for operation in payload.operations:
         operation_id = str(operation.operation_id)
         existing = db.get(SyncOperation, operation_id)
@@ -70,7 +77,16 @@ def push(payload: SyncPushRequest, user: User = Depends(current_user), db: Sessi
             entity_type="sale", entity_uuid=str(operation.entity_id), result=result,
         ))
         results.append(result)
+        if not user.is_admin:
+            contact = db.get(Contact, sale.contact_id)
+            notifications.append((
+                operation.action,
+                serialize_sale(sale, contact.name if contact else None, user.username),
+                operation_id,
+            ))
     db.commit()
+    if notifications:
+        queue_transaction_notifications(background_tasks, notifications, user.username)
     return {"data": {"results": results}}
 
 

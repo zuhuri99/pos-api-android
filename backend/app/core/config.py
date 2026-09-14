@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     user_password: str = Field(min_length=8, max_length=256)
     user_token_ttl_days: int = Field(default=3650, ge=1, le=36500)
     user_authorization_pin: str = Field(min_length=4, max_length=64)
+    resend_api_key: str = ""
+    resend_from_email: str = ""
+    transaction_notification_emails: list[str] = Field(default_factory=list)
     cors_origins: list[str] = ["https://pos.local"]
     allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]
     db_pool_size: int = Field(default=5, ge=1, le=20)
@@ -34,7 +37,7 @@ class Settings(BaseSettings):
             return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
 
-    @field_validator("cors_origins", "allowed_hosts", mode="before")
+    @field_validator("cors_origins", "allowed_hosts", "transaction_notification_emails", mode="before")
     @classmethod
     def parse_origins(cls, value):
         if isinstance(value, str):

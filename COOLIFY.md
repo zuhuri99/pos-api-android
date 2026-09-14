@@ -17,7 +17,9 @@ Frontend production sudah tersedia dalam `frontend_dist`, sehingga VPS Coolify t
 
 Jika variabel resource pernah tersimpan di dashboard, pastikan `API_MEMORY_LIMIT=512m`, `API_CPU_LIMIT=1.0`, `API_MAX_CONCURRENCY=50`, dan `API_THREAD_LIMIT=10`. Nilai tersimpan Coolify mengalahkan default Compose.
 
-Compose memakai `${VARIABLE:?}` untuk `DATABASE_URL`, `APP_SECRET`, `ADMIN_PASSWORD`, `USER_PASSWORD`, dan `USER_AUTHORIZATION_PIN`, sehingga Coolify menolak deployment jika nilai penting tersebut kosong.
+Compose memakai `${VARIABLE:?}` untuk `DATABASE_URL`, `APP_SECRET`, `ADMIN_PASSWORD`, `USER_PASSWORD`, `USER_AUTHORIZATION_PIN`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, dan `TRANSACTION_NOTIFICATION_EMAILS`, sehingga Coolify menolak deployment jika nilai penting tersebut kosong.
+
+Notifikasi transaksi akun kasir dikirim melalui HTTP API Resend setelah transaksi berhasil tersimpan. `RESEND_FROM_EMAIL` wajib memakai domain yang sudah diverifikasi di Resend. Beberapa penerima dapat ditulis pada `TRANSACTION_NOTIFICATION_EMAILS` dengan pemisah koma.
 
 ## Health check
 

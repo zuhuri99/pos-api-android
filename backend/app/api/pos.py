@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -9,6 +9,7 @@ from ..core.db import get_db
 from ..models import Contact, InventoryBalance, Location, Product, ProductVariation, Sale, User
 from ..schemas import InvoiceReservationRequest, SaleCreate, SaleDelete
 from ..services.invoices import reserve_invoice_numbers
+from ..services.notifications import queue_transaction_notification
 from ..services.sales import create_sale, get_sale, serialize_sale, update_sale, void_sale
 from .deps import authorize_sale_delete, current_user
 
@@ -108,11 +109,23 @@ def reserve_numbers(payload: InvoiceReservationRequest, user: User = Depends(cur
 
 
 @router.post("/income/pos/transactions")
-def create_transaction(payload: SaleCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def create_transaction(
+    payload: SaleCreate,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     sale = create_sale(db, user, payload)
     db.commit()
+    contact = db.get(Contact, sale.contact_id)
     cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
-    return {"success": True, "data": serialize_sale(sale, cashier_name=cashier)}
+    data = serialize_sale(sale, contact.name if contact else None, cashier)
+    if not user.is_admin:
+        queue_transaction_notification(
+            background_tasks, "create", data, user.username,
+            f"pos-create-{sale.uuid}-{sale.revision}",
+        )
+    return {"success": True, "data": data}
 
 
 @router.get("/income/pos/transactions")
@@ -154,7 +167,13 @@ def transactions(
 
 
 @router.put("/income/pos/transactions/{sale_id}")
-def update_transaction(sale_id: int, payload: SaleCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def update_transaction(
+    sale_id: int,
+    payload: SaleCreate,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     current = get_sale(db, user.business_id, sale_id)
     payload = payload.model_copy(update={
         "client_transaction_id": current.client_transaction_id,
@@ -163,8 +182,15 @@ def update_transaction(sale_id: int, payload: SaleCreate, user: User = Depends(c
     })
     sale = update_sale(db, user, payload)
     db.commit()
+    contact = db.get(Contact, sale.contact_id)
     cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
-    return {"success": True, "data": serialize_sale(sale, cashier_name=cashier)}
+    data = serialize_sale(sale, contact.name if contact else None, cashier)
+    if not user.is_admin:
+        queue_transaction_notification(
+            background_tasks, "update", data, user.username,
+            f"pos-update-{sale.uuid}-{sale.revision}",
+        )
+    return {"success": True, "data": data}
 
 
 @router.get("/income/pos/transactions/{sale_id}")
@@ -187,6 +213,7 @@ def invoice(sale_id: int, user: User = Depends(current_user), db: Session = Depe
 @router.delete("/income/pos/transactions/{sale_id}")
 def delete_transaction(
     sale_id: int,
+    background_tasks: BackgroundTasks,
     payload: SaleDelete | None = None,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
@@ -194,10 +221,18 @@ def delete_transaction(
     delete_payload = payload or SaleDelete()
     authorize_sale_delete(user, delete_payload.pin)
     sale = get_sale(db, user.business_id, sale_id)
+    was_void = sale.status == "void"
     sale = void_sale(db, user, sale, delete_payload.reason)
     db.commit()
+    contact = db.get(Contact, sale.contact_id)
     cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
-    return {"success": True, "data": serialize_sale(sale, cashier_name=cashier)}
+    data = serialize_sale(sale, contact.name if contact else None, cashier)
+    if not user.is_admin and not was_void:
+        queue_transaction_notification(
+            background_tasks, "delete", data, user.username,
+            f"pos-delete-{sale.uuid}-{sale.revision}",
+        )
+    return {"success": True, "data": data}
 
 
 @router.get("/income/lite")
