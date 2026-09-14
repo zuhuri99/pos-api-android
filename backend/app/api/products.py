@@ -16,6 +16,8 @@ from .pos import product_payload
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
 FIELDS = ["sku", "name", "variation_name", "variation_sku", "selling_price", "initial_stock", "category", "enable_stock", "is_active"]
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_IMPORT_ROWS = 2_000
 
 
 def parse_bool(value, default=True):
@@ -26,16 +28,26 @@ def parse_bool(value, default=True):
 
 def parse_rows(filename: str, content: bytes) -> tuple[list[dict], list[dict]]:
     if filename.lower().endswith(".xlsx"):
-        sheet = load_workbook(io.BytesIO(content), read_only=True, data_only=True).active
-        values = list(sheet.iter_rows(values_only=True))
-        headers = [str(value or "").strip() for value in values[0]] if values else []
-        raw_rows = [dict(zip(headers, row)) for row in values[1:]]
+        workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        sheet = workbook.active
+        values = iter(sheet.iter_rows(values_only=True))
+        headers = [str(value or "").strip() for value in next(values, ())]
+        def xlsx_rows():
+            try:
+                for row in values:
+                    yield dict(zip(headers, row))
+            finally:
+                workbook.close()
+        raw_rows = xlsx_rows()
     else:
         text = content.decode("utf-8-sig")
-        raw_rows = list(csv.DictReader(io.StringIO(text)))
+        raw_rows = csv.DictReader(io.StringIO(text))
     valid, errors = [], []
     seen = set()
     for number, row in enumerate(raw_rows, 2):
+        if number > MAX_IMPORT_ROWS + 1:
+            errors.append({"row": number, "message": f"Maksimal {MAX_IMPORT_ROWS:,} baris per import"})
+            break
         try:
             sku = str(row.get("sku") or "").strip()
             name = str(row.get("name") or "").strip()
@@ -61,8 +73,8 @@ def parse_rows(filename: str, content: bytes) -> tuple[list[dict], list[dict]]:
 
 @router.post("/import/preview")
 async def preview(file: UploadFile = File(...), user: User = Depends(current_admin)):
-    content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, "Ukuran file maksimum 10 MB.")
     if not file.filename or not file.filename.lower().endswith((".csv", ".xlsx")):
         raise HTTPException(422, "Gunakan file CSV atau XLSX.")

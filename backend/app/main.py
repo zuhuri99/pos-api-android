@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import os
 from pathlib import Path
 
+from anyio import to_thread
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,6 +38,7 @@ def bootstrap_database() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    to_thread.current_default_thread_limiter().total_tokens = get_settings().api_thread_limit
     bootstrap_database()
     yield
 

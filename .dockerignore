@@ -14,6 +14,5 @@
 **/*.pyc
 **/*.db
 artifacts
-frontend/android
-frontend/tests
+frontend
 backend/tests

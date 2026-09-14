@@ -8,7 +8,7 @@ Format nomor: `P{bulan 2 digit}{tahun 4 digit}{urutan 4 digit}`. Contoh transaks
 
 ## Deployment production Coolify
 
-Production menggunakan `https://pos2.asas.id`. Satu image Coolify membangun frontend React dan backend FastAPI; FastAPI menyajikan aplikasi web sekaligus API. Compose menggunakan PostgreSQL 16 yang sudah ada melalui variabel `DATABASE_URL`; tidak ada container atau volume database baru.
+Production menggunakan `https://pos2.asas.id`. FastAPI menyajikan frontend React yang sudah dibangun sekaligus API. Compose menggunakan PostgreSQL 16 yang sudah ada melalui variabel `DATABASE_URL`; tidak ada container atau volume database baru. Frontend web telah diprebuild ke `frontend_dist`, jadi deployment Coolify tidak menjalankan Node/Vite di VPS.
 
 Alamat utama:
 

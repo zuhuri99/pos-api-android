@@ -93,4 +93,4 @@ class ProductImportRow(BaseModel):
 
 class ProductImportCommit(BaseModel):
     location_id: int
-    rows: list[ProductImportRow] = Field(min_length=1, max_length=10_000)
+    rows: list[ProductImportRow] = Field(min_length=1, max_length=2_000)

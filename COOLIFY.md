@@ -2,6 +2,8 @@
 
 Konfigurasi ini menjalankan **satu service aplikasi** yang berisi FastAPI dan build web React. PostgreSQL tidak dibuat ulang oleh Compose karena database PostgreSQL 16 sudah tersedia sebagai resource terpisah di Coolify.
 
+Frontend production sudah tersedia dalam `frontend_dist`, sehingga VPS Coolify tidak menjalankan Node/Vite saat deployment. Container dibatasi default 1 CPU, RAM 512 MB, 50 request bersamaan, 10 thread kerja, dan maksimal 8 koneksi PostgreSQL. Naikkan batas hanya setelah melihat metrik penggunaan VPS.
+
 ## Membuat resource
 
 1. Tambahkan repository ini sebagai Docker Compose Application di Coolify.
@@ -12,6 +14,8 @@ Konfigurasi ini menjalankan **satu service aplikasi** yang berisi FastAPI dan bu
 6. Masukkan semua variabel pada `.env.coolify.example` di Environment Variables. Jangan commit nilai rahasia.
 7. Atur domain service `api` ke `https://pos2.asas.id` dengan port internal `8000`.
 8. Pastikan DNS `pos2.asas.id` mengarah ke server Coolify, aktifkan HTTPS, lalu deploy.
+
+Jika variabel resource pernah tersimpan di dashboard, pastikan `API_MEMORY_LIMIT=512m`, `API_CPU_LIMIT=1.0`, `API_MAX_CONCURRENCY=50`, dan `API_THREAD_LIMIT=10`. Nilai tersimpan Coolify mengalahkan default Compose.
 
 Compose memakai `${VARIABLE:?}` untuk `DATABASE_URL`, `APP_SECRET`, dan `BOOTSTRAP_PASSWORD`, sehingga Coolify menolak deployment jika nilai penting tersebut kosong.
 
@@ -45,3 +49,16 @@ Login pertama membuat data awal bila database masih kosong: satu business, user 
 ## Catatan jaringan database
 
 Gunakan hostname/URL **internal** dari database Coolify, bukan `localhost`. `localhost` di container API menunjuk ke container API sendiri. Port PostgreSQL tidak perlu dipublikasikan ke internet selama API dan database dapat saling menjangkau pada jaringan Docker yang sama.
+
+## Memperbarui frontend web
+
+Build frontend dilakukan di komputer pengembangan, bukan VPS:
+
+```bash
+cd frontend
+npm ci
+npm run build
+rsync -a --delete dist/ ../frontend_dist/
+```
+
+Commit `frontend_dist` bersama perubahan source sebelum redeploy. Build Android tetap menggunakan `npm run build:android` dan tidak mengubah build web tersebut.

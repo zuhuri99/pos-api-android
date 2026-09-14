@@ -12,6 +12,10 @@ services:
       TOKEN_TTL_DAYS: ${TOKEN_TTL_DAYS:-30}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://pos2.asas.id,https://pos.local}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-pos2.asas.id,localhost,127.0.0.1}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-3}
+      API_MAX_CONCURRENCY: ${API_MAX_CONCURRENCY:-50}
+      API_THREAD_LIMIT: ${API_THREAD_LIMIT:-10}
       PORT: 8000
     expose:
       - "8000"
@@ -21,4 +25,8 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
-    restart: unless-stopped
+    init: true
+    cpus: "${API_CPU_LIMIT:-1.0}"
+    mem_limit: "${API_MEMORY_LIMIT:-512m}"
+    pids_limit: 256
+    restart: "on-failure:5"

@@ -10,11 +10,19 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(get_settings().database_url, pool_pre_ping=True)
+settings = get_settings()
+engine_options = {"pool_pre_ping": True}
+if not settings.database_url.startswith("sqlite"):
+    engine_options.update({
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_max_overflow,
+        "pool_timeout": 10,
+        "pool_recycle": 1800,
+    })
+engine = create_engine(settings.database_url, **engine_options)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
 def get_db() -> Generator[Session, None, None]:
     with SessionLocal() as session:
         yield session
-

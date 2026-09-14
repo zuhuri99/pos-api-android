@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     token_ttl_days: int = 30
     cors_origins: list[str] = ["https://pos.local"]
     allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]
+    db_pool_size: int = Field(default=5, ge=1, le=20)
+    db_max_overflow: int = Field(default=3, ge=0, le=20)
+    api_max_concurrency: int = Field(default=50, ge=10, le=1000)
+    api_thread_limit: int = Field(default=10, ge=4, le=40)
 
     @field_validator("database_url", mode="before")
     @classmethod
