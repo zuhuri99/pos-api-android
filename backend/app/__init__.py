@@ -1,0 +1,2 @@
+"""POS API application package."""
+

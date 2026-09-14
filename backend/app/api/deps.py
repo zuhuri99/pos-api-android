@@ -1,0 +1,28 @@
+from datetime import datetime, timezone
+
+from fastapi import Depends, Header, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..core.db import get_db
+from ..core.security import token_digest
+from ..models import AccessToken, User
+
+
+def current_user(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+) -> User:
+    if not authorization:
+        raise HTTPException(401, "Token tidak tersedia.")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() not in {"token", "bearer"} or not token:
+        raise HTTPException(401, "Format token tidak valid.")
+    access = db.scalar(select(AccessToken).where(AccessToken.digest == token_digest(token)))
+    now = datetime.now(timezone.utc)
+    if not access or access.revoked_at or access.expires_at.replace(tzinfo=timezone.utc) <= now:
+        raise HTTPException(401, "Sesi tidak valid atau kedaluwarsa.")
+    user = db.get(User, access.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(401, "Pengguna tidak aktif.")
+    return user
+

@@ -1,0 +1,24 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?}
+      APP_SECRET: ${APP_SECRET:?}
+      BOOTSTRAP_USERNAME: ${BOOTSTRAP_USERNAME:-admin}
+      BOOTSTRAP_PASSWORD: ${BOOTSTRAP_PASSWORD:?}
+      TOKEN_TTL_DAYS: ${TOKEN_TTL_DAYS:-30}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://pos2.asas.id,https://pos.local}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-pos2.asas.id,localhost,127.0.0.1}
+      PORT: 8000
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped

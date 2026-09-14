@@ -1,0 +1,23 @@
+{
+  "appId": "id.pos.mobile",
+  "appName": "POS Offline",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "hostname": "pos.local"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "CapacitorSQLite": {
+      "androidIsEncryption": true,
+      "androidBiometric": {
+        "biometricAuth": false
+      }
+    }
+  }
+}
