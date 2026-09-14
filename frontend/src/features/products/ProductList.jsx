@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import PosLayout from "../../layouts/PosLayout";
+import ListPagination from "../../components/ListPagination";
 import { scanProductSku } from "../../platform/native";
 import { getCatalogBootstrap, searchLocalProducts } from "../offline/localStore";
 import { syncNow } from "../offline/syncEngine";
@@ -19,6 +20,8 @@ export default function ProductList() {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState("10");
 
   const load = useCallback(async (synchronize = false) => {
     setBusy(true); setError("");
@@ -42,7 +45,7 @@ export default function ProductList() {
     setError("");
     try {
       const result = await scanProductSku();
-      if (result) setQuery(result);
+      if (result) { setQuery(result); setPage(1); }
     } catch (scanError) {
       setError(scanError.message || "QR produk gagal dipindai.");
     }
@@ -59,6 +62,11 @@ export default function ProductList() {
   const filtered = rows.filter(({ product, variation }) =>
     [product.name, product.sku, variation.name, variation.sub_sku]
       .join(" ").toLowerCase().includes(query.trim().toLowerCase()));
+  const totalPages = pageSize === "all" ? 1 : Math.max(1, Math.ceil(filtered.length / Number(pageSize)));
+  const currentPage = Math.min(page, totalPages);
+  const visible = pageSize === "all"
+    ? filtered
+    : filtered.slice((currentPage - 1) * Number(pageSize), currentPage * Number(pageSize));
 
   return (
     <PosLayout title="Daftar Produk">
@@ -73,19 +81,20 @@ export default function ProductList() {
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <div className="flex gap-2">
-              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari nama atau SKU…" className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400" />
+              <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Cari nama atau SKU…" className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400" />
               <button type="button" onClick={scanProduct} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md" aria-label="Pindai QR produk" title="Pindai QR produk">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm11 0h2v2h-2v-2Zm3 0h2v3h-2v-3Zm-3 4h3v2h-3v-2Z" /></svg>
               </button>
             </div>
-            <select value={locationId} onChange={(event) => setLocationId(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold">
+            <select value={locationId} onChange={(event) => { setLocationId(event.target.value); setPage(1); }} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold">
               {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
             </select>
           </div>
           {error && <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
         </section>
+        <ListPagination total={filtered.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} />
         <section className="grid gap-3 sm:grid-cols-2">
-          {filtered.map(({ product, variation, stock }) => (
+          {visible.map(({ product, variation, stock }) => (
             <article key={variation.id} className="rounded-[22px] border border-white/80 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate font-black text-slate-900">{product.name}</h2><p className="mt-0.5 truncate text-xs text-slate-500">SKU: {variation.sub_sku || product.sku || "-"}{variation.name && variation.name !== "DUMMY" ? ` · ${variation.name}` : ""}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-black ${product.is_inactive ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>{product.is_inactive ? "Nonaktif" : "Aktif"}</span></div>
               <div className="mt-4 flex items-end justify-between border-t border-dashed border-slate-200 pt-3"><div><p className="text-[10px] font-bold uppercase text-slate-400">Stok</p><p className="text-xl font-black text-slate-800">{Number(product.enable_stock) === 1 ? stock : "∞"}</p></div><p className="font-black text-blue-700">{rupiah(variation.sell_price_inc_tax || variation.default_sell_price)}</p></div>

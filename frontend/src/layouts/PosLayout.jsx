@@ -10,7 +10,7 @@ const links = [
   { path: "/transactions", label: "Transaksi", icon: "M4 5h16M4 12h16M4 19h10" },
   { path: "/products", label: "Produk", icon: "M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Zm8 4.5 8-4.5M12 12 4 7.5M12 12v9" },
   { path: "/pos", label: "POS", center: true, icon: "M6 7h12l1 14H5L6 7Zm3 0V5a3 3 0 0 1 6 0v2M9 12h6" },
-  { path: "/sync", label: "Sinkron", icon: "M20 7h-6V1M4 17h6v6M19 12a7 7 0 0 0-12-5L4 10m1 2a7 7 0 0 0 12 5l3-3" },
+  { path: "/sync", label: "Sinkron", icon: "M20 11a8 8 0 0 0-14.9-4M4 4v5h5M4 13a8 8 0 0 0 14.9 4M20 20v-5h-5M9 12l2 2 4-5" },
   { path: "/settings/printer", label: "Printer", icon: "M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6v-7Z" },
 ];
 

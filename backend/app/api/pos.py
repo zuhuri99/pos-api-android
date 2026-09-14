@@ -119,7 +119,7 @@ def create_transaction(payload: SaleCreate, user: User = Depends(current_user), 
 def transactions(
     year: int | None = Query(default=None, ge=2020, le=9999),
     search: str | None = Query(default=None, max_length=100),
-    limit: int = Query(default=200, ge=1, le=500),
+    limit: int | None = Query(default=None, ge=1, le=100000),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
@@ -135,7 +135,10 @@ def transactions(
         )
     if search and search.strip():
         query = query.where(Sale.invoice_no.ilike(f"%{search.strip()}%"))
-    rows = db.scalars(query.order_by(Sale.transaction_date.desc()).limit(limit)).unique().all()
+    query = query.order_by(Sale.transaction_date.desc())
+    if limit is not None:
+        query = query.limit(limit)
+    rows = db.scalars(query).unique().all()
     contact_ids = {row.contact_id for row in rows}
     location_ids = {row.location_id for row in rows}
     creator_ids = {row.created_by for row in rows}

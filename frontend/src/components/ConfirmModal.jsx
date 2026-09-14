@@ -4,6 +4,7 @@ export default function ConfirmModal({
   onConfirm,
   title = "Hapus Expense?",
   message = "Data yang dihapus tidak dapat dikembalikan.",
+  warning = "",
   confirmLabel = "Hapus",
   confirmClassName = "bg-red-600 text-white",
   busy = false,
@@ -20,6 +21,12 @@ export default function ConfirmModal({
         <p className="text-sm text-gray-600 mb-4">
           {message}
         </p>
+
+        {warning && (
+          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-center text-sm font-black text-red-700">
+            {warning}
+          </p>
+        )}
 
         <div className="flex gap-3">
           <button

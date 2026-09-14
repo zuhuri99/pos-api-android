@@ -842,7 +842,7 @@ export default function PosTransactionForm() {
         </div>
       )}
 
-      <ConfirmModal open={confirmOpen} onClose={() => !saving && setConfirmOpen(false)} onConfirm={submit} busy={saving} title={form.status === "draft" ? "Simpan sebagai draft?" : isEdit ? "Simpan perubahan transaksi?" : "Buat transaksi POS?"} message={form.status === "draft" ? `${form.products.length} produk dengan total ${formatPosCurrency(total)} akan disimpan sebagai transaksi sementara dan belum final.` : `${form.products.length} produk dengan total ${formatPosCurrency(total)} akan ${isEdit ? "diperbarui" : "disimpan dan masuk antrean sinkronisasi"}.`} confirmLabel={form.status === "draft" ? "Simpan Draft" : isEdit ? "Simpan" : "Buat Transaksi"} confirmClassName="bg-[#0067b8] text-white" />
+      <ConfirmModal open={confirmOpen} onClose={() => !saving && setConfirmOpen(false)} onConfirm={submit} busy={saving} title={form.status === "draft" ? "Simpan sebagai draft?" : isEdit ? "Simpan perubahan transaksi?" : "Buat transaksi POS?"} message={form.status === "draft" ? `${form.products.length} produk dengan total ${formatPosCurrency(total)} akan disimpan sebagai transaksi sementara dan belum final.` : `${form.products.length} produk dengan total ${formatPosCurrency(total)} akan ${isEdit ? "diperbarui" : "disimpan dan masuk antrean sinkronisasi"}.`} warning={!isEdit && form.status !== "draft" ? "HARAP PASTIKAN NOTA BENAR!" : ""} confirmLabel={form.status === "draft" ? "Simpan Draft" : isEdit ? "Simpan" : "Buat Transaksi"} confirmClassName="bg-[#0067b8] text-white" />
     </PosLayout>
   );
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import PosLayout from "../../../layouts/PosLayout";
+import ListPagination from "../../../components/ListPagination";
 import TransactionDeleteDialog from "../components/TransactionDeleteDialog";
 import { posApi } from "../api/posApi";
 import { getPosApiError } from "../posUtils";
@@ -46,7 +47,14 @@ export default function TransactionList() {
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState("10");
   const requiresDeletePin = !getActiveAccount()?.user?.is_superuser;
+  const totalPages = pageSize === "all" ? 1 : Math.max(1, Math.ceil(sales.length / Number(pageSize)));
+  const currentPage = Math.min(page, totalPages);
+  const visibleSales = pageSize === "all"
+    ? sales
+    : sales.slice((currentPage - 1) * Number(pageSize), currentPage * Number(pageSize));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,16 +98,18 @@ export default function TransactionList() {
           <div className="grid grid-cols-[100px_minmax(0,1fr)] gap-2">
             <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
               Tahun
-              <input type="number" min="2020" max="9999" value={year} onChange={(event) => setYear(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-blue-400" />
+              <input type="number" min="2020" max="9999" value={year} onChange={(event) => { setYear(event.target.value); setPage(1); }} className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-blue-400" />
             </label>
             <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
               Cari nomor invoice
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Contoh P1020260001" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-400" />
+              <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Contoh P1020260001" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-400" />
             </label>
           </div>
           {offline && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">Mode offline: menampilkan transaksi yang tersimpan di perangkat.</p>}
           {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{error}</p>}
         </section>
+
+        {!loading && <ListPagination total={sales.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1); }} />}
 
         {loading ? (
           <div className="flex min-h-52 items-center justify-center"><span className="h-9 w-9 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" /></div>
@@ -107,7 +117,7 @@ export default function TransactionList() {
           <div className="rounded-[24px] border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Belum ada transaksi pada periode ini.</div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {sales.map((sale) => (
+            {visibleSales.map((sale) => (
               <article key={`${sale.client_transaction_id || sale.id}-${sale.invoice_no}`} className="rounded-[24px] border border-white/80 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">

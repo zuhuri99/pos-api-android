@@ -58,7 +58,7 @@ export const posApi = {
     if (!navigator.onLine) return response(filteredLocal, { success: true, offline: true });
     try {
       const remoteResponse = await incomeApi.get("/income/pos/transactions", {
-        params: { year: year || undefined, search: term || undefined, limit: 500 },
+        params: { year: year || undefined, search: term || undefined },
         skipIncomeFallback: true,
       });
       const remote = remoteResponse.data?.data || [];
