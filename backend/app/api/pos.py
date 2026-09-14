@@ -111,7 +111,8 @@ def reserve_numbers(payload: InvoiceReservationRequest, user: User = Depends(cur
 def create_transaction(payload: SaleCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
     sale = create_sale(db, user, payload)
     db.commit()
-    return {"success": True, "data": serialize_sale(sale)}
+    cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
+    return {"success": True, "data": serialize_sale(sale, cashier_name=cashier)}
 
 
 @router.get("/income/pos/transactions")
@@ -137,13 +138,14 @@ def transactions(
     rows = db.scalars(query.order_by(Sale.transaction_date.desc()).limit(limit)).unique().all()
     contact_ids = {row.contact_id for row in rows}
     location_ids = {row.location_id for row in rows}
+    creator_ids = {row.created_by for row in rows}
     contact_names = dict(db.execute(select(Contact.id, Contact.name).where(Contact.id.in_(contact_ids))).all()) if contact_ids else {}
     location_names = dict(db.execute(select(Location.id, Location.name).where(Location.id.in_(location_ids))).all()) if location_ids else {}
+    cashier_names = dict(db.execute(select(User.id, User.username).where(User.id.in_(creator_ids))).all()) if creator_ids else {}
     data = []
     for row in rows:
-        item = serialize_sale(row, contact_names.get(row.contact_id))
+        item = serialize_sale(row, contact_names.get(row.contact_id), cashier_names.get(row.created_by))
         item["location_name"] = location_names.get(row.location_id, "-")
-        item["_source_user"] = user.username
         data.append(item)
     return {"success": True, "data": data}
 
@@ -158,22 +160,24 @@ def update_transaction(sale_id: int, payload: SaleCreate, user: User = Depends(c
     })
     sale = update_sale(db, user, payload)
     db.commit()
-    return {"success": True, "data": serialize_sale(sale)}
+    cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
+    return {"success": True, "data": serialize_sale(sale, cashier_name=cashier)}
 
 
 @router.get("/income/pos/transactions/{sale_id}")
 def transaction(sale_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     sale = get_sale(db, user.business_id, sale_id)
     contact = db.get(Contact, sale.contact_id)
-    return {"success": True, "data": serialize_sale(sale, contact.name if contact else None)}
+    cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
+    return {"success": True, "data": serialize_sale(sale, contact.name if contact else None, cashier)}
 
 
 @router.get("/income/pos/transactions/{sale_id}/invoice")
 def invoice(sale_id: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
     sale = get_sale(db, user.business_id, sale_id)
     contact = db.get(Contact, sale.contact_id)
-    data = serialize_sale(sale, contact.name if contact else None)
-    data["_source_user"] = user.username
+    cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
+    data = serialize_sale(sale, contact.name if contact else None, cashier)
     return {"success": True, "data": data}
 
 
@@ -189,7 +193,8 @@ def delete_transaction(
     sale = get_sale(db, user.business_id, sale_id)
     sale = void_sale(db, user, sale, delete_payload.reason)
     db.commit()
-    return {"success": True, "data": serialize_sale(sale)}
+    cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
+    return {"success": True, "data": serialize_sale(sale, cashier_name=cashier)}
 
 
 @router.get("/income/lite")

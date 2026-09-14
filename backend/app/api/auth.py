@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,8 +8,8 @@ from ..core.config import get_settings
 from ..core.db import get_db
 from ..core.security import new_token, token_digest, verify_password
 from ..models import AccessToken, User
-from ..schemas import LoginRequest
-from .deps import current_user
+from ..schemas import LoginRequest, LogoutRequest
+from .deps import authorize_logout, current_user
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -35,3 +35,19 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.get("/token/verify/")
 def verify(user: User = Depends(current_user)):
     return {"detail": "Token valid.", "user_id": user.id}
+
+
+@router.post("/logout/")
+def logout(
+    payload: LogoutRequest,
+    authorization: str = Header(),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    authorize_logout(user, payload.pin)
+    _, _, raw_token = authorization.partition(" ")
+    access = db.scalar(select(AccessToken).where(AccessToken.digest == token_digest(raw_token)))
+    if access:
+        access.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"detail": "Berhasil keluar."}

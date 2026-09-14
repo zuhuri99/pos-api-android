@@ -3,7 +3,8 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import { isNative } from "../platform/native";
 import { openCashDrawer } from "../platform/thermalPrinter";
-import { logout } from "../utils/auth";
+import api from "../api/axios";
+import { getActiveAccount, logout } from "../utils/auth";
 
 const links = [
   { path: "/transactions", label: "Transaksi", icon: "M4 5h16M4 12h16M4 19h10" },
@@ -17,9 +18,40 @@ export default function PosLayout({ title, children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [drawerBusy, setDrawerBusy] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [logoutPin, setLogoutPin] = useState("");
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const activeAccount = getActiveAccount();
+  const requiresLogoutPin = !activeAccount?.user?.is_superuser;
   const signOut = async () => {
+    if (requiresLogoutPin) {
+      setLogoutPin("");
+      setLogoutError("");
+      setLogoutOpen(true);
+      return;
+    }
     await logout();
     navigate("/login", { replace: true });
+  };
+  const authorizeSignOut = async (event) => {
+    event.preventDefault();
+    if (logoutPin.length < 4) {
+      setLogoutError("Masukkan PIN otorisasi untuk keluar.");
+      return;
+    }
+    setLogoutBusy(true);
+    setLogoutError("");
+    try {
+      await api.post("/auth/logout/", { pin: logoutPin });
+      await logout();
+      navigate("/login", { replace: true });
+    } catch (error) {
+      const detail = error.response?.data?.detail;
+      setLogoutError(typeof detail === "string" ? detail : error.message || "Otorisasi keluar gagal.");
+    } finally {
+      setLogoutBusy(false);
+    }
   };
   const openDrawer = async () => {
     if (!window.confirm("Buka laci kasir melalui printer thermal yang aktif?")) return;
@@ -56,6 +88,24 @@ export default function PosLayout({ title, children }) {
           );
         })}
       </nav>
+      {logoutOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+          <form onSubmit={authorizeSignOut} className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl">
+            <h2 className="text-lg font-black text-slate-900">Otorisasi keluar</h2>
+            <p className="mt-1 text-sm text-slate-500">Masukkan PIN otorisasi untuk keluar dari akun {activeAccount?.user?.username || "kasir"}.</p>
+            <label className="mt-4 block text-xs font-extrabold uppercase tracking-wide text-slate-600">
+              PIN otorisasi
+              <input type="password" inputMode="numeric" autoComplete="off" autoFocus value={logoutPin} onChange={(event) => setLogoutPin(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 text-center text-lg font-black tracking-[0.35em] outline-none focus:border-blue-500" />
+            </label>
+            {logoutError && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{logoutError}</p>}
+            <p className="mt-3 text-xs text-amber-700">Koneksi internet diperlukan untuk memverifikasi PIN.</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" disabled={logoutBusy} onClick={() => setLogoutOpen(false)} className="rounded-xl border border-slate-300 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50">Batal</button>
+              <button type="submit" disabled={logoutBusy} className="rounded-xl bg-slate-900 py-2.5 text-sm font-extrabold text-white disabled:opacity-50">{logoutBusy ? "Memeriksa…" : "Keluar"}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

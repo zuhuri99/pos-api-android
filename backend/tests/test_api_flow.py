@@ -46,6 +46,18 @@ def test_cashier_delete_requires_valid_pin():
         assert authorized.status_code == 404
 
 
+def test_cashier_logout_requires_pin_and_revokes_token():
+    with TestClient(app) as client:
+        headers = user_headers(client)
+        denied = client.post("/api/v1/auth/logout/", headers=headers, json={"pin": "000000"})
+        assert denied.status_code == 403
+        assert client.get("/api/v1/auth/token/verify/", headers=headers).status_code == 200
+
+        logged_out = client.post("/api/v1/auth/logout/", headers=headers, json={"pin": "654321"})
+        assert logged_out.status_code == 200
+        assert client.get("/api/v1/auth/token/verify/", headers=headers).status_code == 401
+
+
 def test_product_sale_and_idempotent_offline_sync():
     with TestClient(app) as client:
         headers = auth_headers(client)
@@ -109,6 +121,11 @@ def test_product_sale_and_idempotent_offline_sync():
         )
         assert transaction_list.status_code == 200, transaction_list.text
         assert [row["id"] for row in transaction_list.json()["data"]] == [sale_id]
+        assert transaction_list.json()["data"][0]["_source_user"] == "admin"
+
+        invoice = client.get(f"/api/v1/income/pos/transactions/{sale_id}/invoice", headers=headers)
+        assert invoice.status_code == 200
+        assert invoice.json()["data"]["_source_user"] == "admin"
 
         update_payload = {
             **body["operations"][0]["payload"],

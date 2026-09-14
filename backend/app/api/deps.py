@@ -38,8 +38,18 @@ def current_admin(user: User = Depends(current_user)) -> User:
 def authorize_sale_delete(user: User, pin: str | None) -> None:
     if user.is_admin:
         return
-    expected = get_settings().user_delete_pin
+    expected = get_settings().user_authorization_pin
     if not pin:
         raise HTTPException(403, "PIN otorisasi diperlukan untuk menghapus transaksi.")
+    if not secrets.compare_digest(pin, expected):
+        raise HTTPException(403, "PIN otorisasi tidak valid.")
+
+
+def authorize_logout(user: User, pin: str | None) -> None:
+    if user.is_admin:
+        return
+    expected = get_settings().user_authorization_pin
+    if not pin:
+        raise HTTPException(403, "PIN otorisasi diperlukan untuk keluar.")
     if not secrets.compare_digest(pin, expected):
         raise HTTPException(403, "PIN otorisasi tidak valid.")

@@ -17,7 +17,7 @@ Frontend production sudah tersedia dalam `frontend_dist`, sehingga VPS Coolify t
 
 Jika variabel resource pernah tersimpan di dashboard, pastikan `API_MEMORY_LIMIT=512m`, `API_CPU_LIMIT=1.0`, `API_MAX_CONCURRENCY=50`, dan `API_THREAD_LIMIT=10`. Nilai tersimpan Coolify mengalahkan default Compose.
 
-Compose memakai `${VARIABLE:?}` untuk `DATABASE_URL`, `APP_SECRET`, `ADMIN_PASSWORD`, `USER_PASSWORD`, dan `USER_DELETE_PIN`, sehingga Coolify menolak deployment jika nilai penting tersebut kosong.
+Compose memakai `${VARIABLE:?}` untuk `DATABASE_URL`, `APP_SECRET`, `ADMIN_PASSWORD`, `USER_PASSWORD`, dan `USER_AUTHORIZATION_PIN`, sehingga Coolify menolak deployment jika nilai penting tersebut kosong.
 
 ## Health check
 
@@ -44,7 +44,7 @@ Respons health yang benar:
 
 Setelah login sebagai admin, halaman import/export produk tersedia di `https://pos2.asas.id/admin/products`. Route React lain tetap dapat dibuka langsung karena FastAPI memberikan fallback ke `index.html`, sedangkan route `/api/*`, `/docs`, dan `/openapi.json` tetap ditangani sebagai endpoint backend.
 
-Saat server dimulai, aplikasi memastikan hanya dua akun aktif sesuai environment: `ADMIN_USERNAME` sebagai admin dan `USER_USERNAME` sebagai kasir. Password, peran, dan status aktif keduanya selalu disinkronkan dari environment; akun lain pada business yang sama dinonaktifkan. Gunakan password kuat dan PIN penghapusan yang tidak mudah ditebak. Mengubah nilainya di Coolify lalu me-restart service akan memperbarui akun.
+Saat server dimulai, aplikasi memastikan hanya dua akun aktif sesuai environment: `ADMIN_USERNAME` sebagai admin dan `USER_USERNAME` sebagai kasir. Password, peran, dan status aktif keduanya selalu disinkronkan dari environment; akun lain pada business yang sama dinonaktifkan. Gunakan password kuat dan `USER_AUTHORIZATION_PIN` yang tidak mudah ditebak; PIN yang sama mengotorisasi penghapusan transaksi dan keluar dari akun kasir. Mengubah nilainya di Coolify lalu me-restart service akan memperbarui akun.
 
 ## Catatan jaringan database
 

@@ -12,6 +12,10 @@ class LoginRequest(BaseModel):
     device_id: str | None = None
 
 
+class LogoutRequest(BaseModel):
+    pin: str | None = Field(default=None, min_length=4, max_length=64, exclude=True)
+
+
 class ProductLine(BaseModel):
     model_config = ConfigDict(extra="ignore")
     sell_line_id: int | None = None

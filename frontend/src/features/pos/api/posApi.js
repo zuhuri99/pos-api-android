@@ -125,7 +125,7 @@ export const posApi = {
         ...local,
         contact: contact?.name || "Umum",
         location_name: location?.name || "-",
-        _source_user: "pos",
+        _source_user: local._source_user || getActiveAccount()?.user?.username || "-",
         sell_lines: sellLines,
         payment_lines: local.payments || [],
         total_before_tax: subtotal,
@@ -140,6 +140,7 @@ export const posApi = {
     const device = await getLoginDeviceInfo();
     const local = await saveLocalSale({
       ...payload,
+      _source_user: getActiveAccount()?.user?.username || "-",
       client_transaction_id: crypto.randomUUID(),
       device_id: device.device_id || "android-pos",
       products: await hydrateProducts(payload.products),

@@ -26,7 +26,7 @@ def money(value) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal("0.0001"))
 
 
-def serialize_sale(sale: Sale, contact_name: str | None = None) -> dict:
+def serialize_sale(sale: Sale, contact_name: str | None = None, cashier_name: str | None = None) -> dict:
     payments = [
         {
             "payment_id": payment.id,
@@ -45,6 +45,7 @@ def serialize_sale(sale: Sale, contact_name: str | None = None) -> dict:
         "location_id": sale.location_id,
         "contact_id": sale.contact_id,
         "contact": contact_name or "Umum",
+        "_source_user": cashier_name or "-",
         "invoice_no": sale.invoice_no,
         "transaction_date": sale.transaction_date.isoformat(sep=" "),
         "status": sale.status,
@@ -203,7 +204,7 @@ def create_sale(db: Session, user: User, data: SaleCreate) -> Sale:
                 },
             ))
     db.flush()
-    payload = serialize_sale(sale, contact.name)
+    payload = serialize_sale(sale, contact.name, user.username)
     db.add(ChangeLog(
         business_id=user.business_id, entity_type="sale", entity_uuid=sale.uuid,
         action="upsert", revision=sale.revision, payload=payload,
@@ -328,7 +329,9 @@ def update_sale(db: Session, user: User, data: SaleCreate) -> Sale:
     db.flush()
     db.add(ChangeLog(
         business_id=user.business_id, entity_type="sale", entity_uuid=sale.uuid,
-        action="upsert", revision=sale.revision, payload=serialize_sale(sale, contact.name),
+        action="upsert", revision=sale.revision, payload=serialize_sale(
+            sale, contact.name, db.scalar(select(User.username).where(User.id == sale.created_by)),
+        ),
     ))
     db.flush()
     return get_sale(db, user.business_id, sale.id)
