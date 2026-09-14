@@ -1,6 +1,7 @@
 import incomeApi from "../../api/incomeAxios";
 import { getAuthToken } from "../../utils/auth";
 import { getLoginDeviceInfo } from "../../platform/deviceInfo";
+import { wibYearMonth } from "../../utils/dateTime";
 import {
   addInvoiceNumbers,
   availableInvoiceCount,
@@ -26,10 +27,10 @@ async function deviceId() {
 }
 
 async function replenishInvoices(dateValue = new Date()) {
-  const now = dateValue instanceof Date ? dateValue : new Date(String(dateValue).replace(" ", "T"));
-  if (await availableInvoiceCount(now.getFullYear(), now.getMonth() + 1) >= 20) return;
+  const { year, month } = wibYearMonth(dateValue);
+  if (await availableInvoiceCount(year, month) >= 20) return;
   const response = await incomeApi.post("/income/pos/invoice-numbers/reserve", {
-    device_id: await deviceId(), year: now.getFullYear(), month: now.getMonth() + 1, count: 100,
+    device_id: await deviceId(), year, month, count: 100,
   }, { skipIncomeFallback: true });
   await addInvoiceNumbers(response.data?.data?.numbers || []);
 }

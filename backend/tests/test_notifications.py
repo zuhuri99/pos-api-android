@@ -9,7 +9,7 @@ def test_mark_notification_contains_reason_and_transaction_items():
         "final_total": "25000",
         "mark_type": "other",
         "mark_reason": "Harga perlu diperiksa",
-        "marked_at": "2026-09-15T11:00:00+07:00",
+        "marked_at": "2026-09-15T04:00:00Z",
         "products": [{
             "product_name": "Produk A", "variation_name": "Merah",
             "quantity": "2", "unit_price": "12500",
@@ -22,4 +22,6 @@ def test_mark_notification_contains_reason_and_transaction_items():
     assert "Produk A" in payload["html"]
     assert "Merah" in payload["html"]
     assert "kasir" in payload["html"]
+    assert "15 Sep 2026, 10:00 WIB" in payload["html"]
+    assert "15 Sep 2026, 11:00 WIB" in payload["html"]
     assert payload["tags"] == [{"name": "event", "value": "pos_mark"}]

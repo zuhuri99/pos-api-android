@@ -156,6 +156,7 @@ def test_product_sale_and_idempotent_offline_sync():
         assert updated.status_code == 200, updated.text
         assert float(updated.json()["data"]["products"][0]["quantity"]) == 1
         assert updated.json()["data"]["revision"] == 2
+        assert updated.json()["data"]["transaction_date"].endswith("+07:00")
         corrected_stock = client.get("/api/v1/pos-data/product-stock-report?location_id=1", headers=headers)
         assert corrected_stock.json()["data"][0]["stock"] == "9.0000"
 
@@ -176,6 +177,7 @@ def test_product_sale_and_idempotent_offline_sync():
         assert marked.json()["data"]["mark_reason"] == "Perlu verifikasi pelanggan"
         assert marked.json()["data"]["marked_by"] == 1
         assert marked.json()["data"]["revision"] == 3
+        assert marked.json()["data"]["marked_at"].endswith("+07:00")
 
         delete_operation_id = str(uuid4())
         delete_body = {

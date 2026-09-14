@@ -8,6 +8,7 @@ import TransactionMarkDialog from "../components/TransactionMarkDialog";
 import { posApi } from "../api/posApi";
 import { getPosApiError } from "../posUtils";
 import { getActiveAccount } from "../../../utils/auth";
+import { currentWibYear, formatWibDateTime } from "../../../utils/dateTime";
 
 const rupiah = (value) => new Intl.NumberFormat("id-ID", {
   style: "currency",
@@ -15,13 +16,7 @@ const rupiah = (value) => new Intl.NumberFormat("id-ID", {
   maximumFractionDigits: 0,
 }).format(Number(value) || 0);
 
-const dateLabel = (value) => value ? new Date(String(value).replace(" ", "T")).toLocaleString("id-ID", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-}) : "-";
+const dateLabel = formatWibDateTime;
 
 const saleTotal = (sale) => {
   if (sale.final_total !== undefined && sale.final_total !== null) return Number(sale.final_total) || 0;
@@ -40,7 +35,7 @@ const saleTotal = (sale) => {
 
 export default function TransactionList() {
   const navigate = useNavigate();
-  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [year, setYear] = useState(String(currentWibYear()));
   const [search, setSearch] = useState("");
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);

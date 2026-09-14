@@ -2,8 +2,10 @@ import html
 import hashlib
 import json
 import logging
+from datetime import datetime
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 from fastapi import BackgroundTasks
 
@@ -19,6 +21,21 @@ ACTION_LABELS = {
     "delete": "Transaksi dihapus",
     "mark": "Transaksi ditandai",
 }
+WIB = ZoneInfo("Asia/Jakarta")
+MONTHS_ID = ("", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
+
+
+def _wib_datetime(value: object) -> str:
+    if not value:
+        return "-"
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=WIB)
+        parsed = parsed.astimezone(WIB)
+        return f"{parsed.day:02d} {MONTHS_ID[parsed.month]} {parsed.year:04d}, {parsed.hour:02d}:{parsed.minute:02d} WIB"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def _money(value: object) -> str:
@@ -130,7 +147,7 @@ def _email_payload(
         ("Aksi", label),
         ("Invoice", invoice),
         ("Dilakukan oleh", actor_username),
-        ("Waktu transaksi", str(sale.get("transaction_date") or "-")),
+        ("Waktu transaksi", _wib_datetime(sale.get("transaction_date"))),
         ("Customer", str(sale.get("contact") or "Umum")),
         ("Jumlah barang", f"{item_count:g}"),
         ("Total", _money(sale.get("final_total"))),
@@ -142,7 +159,7 @@ def _email_payload(
         rows.extend([
             ("Ditandai sebagai", mark_type),
             ("Alasan tanda", str(sale.get("mark_reason") or "-")),
-            ("Waktu penandaan", str(sale.get("marked_at") or "-")),
+            ("Waktu penandaan", _wib_datetime(sale.get("marked_at"))),
         ])
     table = "".join(
         f'<tr><td style="padding:7px 12px;color:#64748b">{html.escape(key)}</td>'

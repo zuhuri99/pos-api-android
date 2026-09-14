@@ -1,4 +1,5 @@
 import { isNative } from "../../platform/native.js";
+import { wibYearMonth } from "../../utils/dateTime.js";
 
 const WEB_KEY = "pos.offline.store.v1";
 const emptyWebStore = () => ({
@@ -307,8 +308,8 @@ export async function availableInvoiceCount(year, month) {
 }
 
 export async function takeInvoiceNumber(dateValue) {
-  const date = new Date(String(dateValue).replace(" ", "T"));
-  const period = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const { year, month } = wibYearMonth(dateValue);
+  const period = `${year}${String(month).padStart(2, "0")}`;
   const db = await nativeDb();
   if (!db) {
     const data = readWeb();
@@ -332,8 +333,8 @@ export async function takeInvoiceNumber(dateValue) {
 }
 
 export async function peekInvoiceNumber(dateValue) {
-  const date = new Date(String(dateValue).replace(" ", "T"));
-  const period = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const { year, month } = wibYearMonth(dateValue);
+  const period = `${year}${String(month).padStart(2, "0")}`;
   const db = await nativeDb();
   if (!db) {
     return readWeb().invoices

@@ -17,6 +17,7 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { QRCodeSVG } from "qrcode.react";
 import { getActiveAccount } from "../utils/auth";
+import { formatWibDateTime } from "../utils/dateTime";
 
 const formatRupiah = (angka) => {
   return new Intl.NumberFormat("id-ID", {
@@ -25,16 +26,7 @@ const formatRupiah = (angka) => {
   }).format(Number(angka) || 0);
 };
 
-const formatTanggal = (tgl) => {
-  if (!tgl) return "-";
-  return new Date(tgl).toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+const formatTanggal = formatWibDateTime;
 
 const getStatusStyle = (status) => {
   switch (status?.toLowerCase()) {

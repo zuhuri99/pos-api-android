@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -22,6 +23,23 @@ from ..schemas import SaleCreate, SaleMark
 from .invoices import next_online_invoice, validate_invoice_period, validate_invoice_reservation
 
 
+WIB = ZoneInfo("Asia/Jakarta")
+
+
+def business_datetime_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    aware = value.replace(tzinfo=WIB) if value.tzinfo is None else value.astimezone(WIB)
+    return aware.isoformat(sep=" ")
+
+
+def system_datetime_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    aware = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+    return aware.astimezone(WIB).isoformat(sep=" ")
+
+
 def money(value) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal("0.0001"))
 
@@ -32,7 +50,7 @@ def serialize_sale(sale: Sale, contact_name: str | None = None, cashier_name: st
             "payment_id": payment.id,
             "amount": str(payment.amount),
             "method": payment.method,
-            "paid_on": payment.paid_on.isoformat(sep=" "),
+            "paid_on": business_datetime_iso(payment.paid_on),
             "account_id": payment.account_id,
             "note": payment.note,
         }
@@ -47,7 +65,7 @@ def serialize_sale(sale: Sale, contact_name: str | None = None, cashier_name: st
         "contact": contact_name or "Umum",
         "_source_user": cashier_name or "-",
         "invoice_no": sale.invoice_no,
-        "transaction_date": sale.transaction_date.isoformat(sep=" "),
+        "transaction_date": business_datetime_iso(sale.transaction_date),
         "status": sale.status,
         "payment_status": sale.payment_status,
         "discount_type": sale.discount_type,
@@ -59,10 +77,12 @@ def serialize_sale(sale: Sale, contact_name: str | None = None, cashier_name: st
         "final_total": str(sale.final_total),
         "sale_note": sale.sale_note,
         "revision": sale.revision,
-        "voided_at": sale.voided_at.isoformat() if sale.voided_at else None,
+        "created_at": system_datetime_iso(sale.created_at),
+        "updated_at": system_datetime_iso(sale.updated_at),
+        "voided_at": system_datetime_iso(sale.voided_at),
         "voided_by": sale.voided_by,
         "void_reason": sale.void_reason,
-        "marked_at": sale.marked_at.isoformat() if sale.marked_at else None,
+        "marked_at": system_datetime_iso(sale.marked_at),
         "marked_by": sale.marked_by,
         "mark_type": sale.mark_type,
         "mark_reason": sale.mark_reason,

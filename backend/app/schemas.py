@@ -3,7 +3,19 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from zoneinfo import ZoneInfo
+
+
+WIB = ZoneInfo("Asia/Jakarta")
+
+
+def normalize_wib(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=WIB)
+    return value.astimezone(WIB)
 
 
 class LoginRequest(BaseModel):
@@ -38,6 +50,11 @@ class PaymentLine(BaseModel):
     account_id: int | None = None
     note: str | None = None
 
+    @field_validator("paid_on")
+    @classmethod
+    def paid_on_in_wib(cls, value):
+        return normalize_wib(value)
+
 
 class SaleCreate(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -56,6 +73,11 @@ class SaleCreate(BaseModel):
     change_return: Decimal = Field(default=0, ge=0)
     products: list[ProductLine] = Field(min_length=1)
     payments: list[PaymentLine] = Field(default_factory=list)
+
+    @field_validator("transaction_date")
+    @classmethod
+    def transaction_date_in_wib(cls, value):
+        return normalize_wib(value)
 
 
 class SaleDelete(BaseModel):
