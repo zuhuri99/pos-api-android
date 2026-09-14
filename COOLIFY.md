@@ -1,6 +1,6 @@
 # Deployment backend di Coolify
 
-Konfigurasi ini menjalankan **satu service API saja**. PostgreSQL tidak dibuat ulang oleh Compose karena database PostgreSQL 16 sudah tersedia sebagai resource terpisah di Coolify.
+Konfigurasi ini menjalankan **satu service aplikasi** yang berisi FastAPI dan build web React. PostgreSQL tidak dibuat ulang oleh Compose karena database PostgreSQL 16 sudah tersedia sebagai resource terpisah di Coolify.
 
 ## Membuat resource
 
@@ -37,6 +37,8 @@ Respons health yang benar:
 ```json
 {"status":"ok","database":"ok"}
 ```
+
+Setelah login sebagai admin, halaman import/export produk tersedia di `https://pos2.asas.id/admin/products`. Route React lain tetap dapat dibuka langsung karena FastAPI memberikan fallback ke `index.html`, sedangkan route `/api/*`, `/docs`, dan `/openapi.json` tetap ditangani sebagai endpoint backend.
 
 Login pertama membuat data awal bila database masih kosong: satu business, user bootstrap, lokasi `Toko Utama`, dan customer `Umum`. Setelah berhasil masuk, segera gunakan password bootstrap yang kuat. Mengubah `BOOTSTRAP_PASSWORD` setelah user tercipta tidak mengubah password user lama.
 

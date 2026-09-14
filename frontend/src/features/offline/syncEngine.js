@@ -12,6 +12,7 @@ import {
   replaceCatalog,
   setMeta,
   applyInventoryChange,
+  applyRemoteSaleDelete,
   upsertProduct,
 } from "./localStore";
 
@@ -71,6 +72,7 @@ export async function syncNow() {
       for (const change of data.changes || []) {
         if (change.entity === "product" && change.action === "upsert") await upsertProduct(change.data);
         if (change.entity === "inventory" && change.action === "upsert") await applyInventoryChange(change.data);
+        if (change.entity === "sale" && change.action === "delete") await applyRemoteSaleDelete(change.data);
       }
       cursor = Number(data.cursor || cursor);
       hasMore = Boolean(data.has_more);

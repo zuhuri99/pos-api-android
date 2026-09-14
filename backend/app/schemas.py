@@ -54,13 +54,17 @@ class SaleCreate(BaseModel):
     payments: list[PaymentLine] = Field(default_factory=list)
 
 
+class SaleDelete(BaseModel):
+    reason: str = Field(default="Transaksi salah", min_length=3, max_length=500)
+
+
 class SyncOperationIn(BaseModel):
     operation_id: UUID
     entity: Literal["sale"]
-    action: Literal["create", "update"]
+    action: Literal["create", "update", "delete"]
     entity_id: UUID
     base_revision: int = 0
-    payload: SaleCreate
+    payload: SaleCreate | SaleDelete
 
 
 class SyncPushRequest(BaseModel):

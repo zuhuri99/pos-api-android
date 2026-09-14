@@ -26,7 +26,14 @@ async function exportLocalProducts() {
   await saveBlob(new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" }), "produk-pos.csv");
 }
 
+async function downloadTemplate() {
+  const example = ["SKU-001", "Contoh Produk", "DUMMY", "SKU-001", "15000", "10", "Umum", "1", "1"];
+  const csv = `${columns.join(",")}\r\n${example.map(csvCell).join(",")}\r\n`;
+  await saveBlob(new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" }), "template-import-produk.csv");
+}
+
 export default function ProductTransfer() {
+  const isAdmin = localStorage.getItem("is_superuser") === "true";
   const [locations, setLocations] = useState([]);
   const [locationId, setLocationId] = useState("");
   const [preview, setPreview] = useState(null);
@@ -56,12 +63,15 @@ export default function ProductTransfer() {
     finally { setBusy(false); }
   };
 
+  if (!isAdmin) return <PosLayout title="Administrasi Produk"><div className="rounded-2xl bg-red-50 p-5 font-bold text-red-700">Akses administrator diperlukan.</div></PosLayout>;
+
   return (
-    <PosLayout title="Import / Export Produk">
+    <PosLayout title="Administrasi Produk">
       <section className="space-y-4">
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="font-black text-slate-900">Import CSV/XLSX</h2>
           <p className="mt-1 text-xs text-slate-500">Import memerlukan koneksi. Data diperiksa sebelum disimpan.</p>
+          <button type="button" onClick={downloadTemplate} className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-extrabold text-blue-700">Unduh template CSV</button>
           <label className="mt-4 block text-sm font-bold">Lokasi stok
             <select value={locationId} onChange={(event) => setLocationId(event.target.value)} className="mt-1 w-full rounded-xl border p-3">{locations.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select>
           </label>

@@ -26,3 +26,8 @@ def current_user(
         raise HTTPException(401, "Pengguna tidak aktif.")
     return user
 
+
+def current_admin(user: User = Depends(current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(403, "Akses administrator diperlukan.")
+    return user

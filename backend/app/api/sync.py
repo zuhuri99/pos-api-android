@@ -3,9 +3,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..core.db import get_db
-from ..models import ChangeLog, Contact, Location, Product, ProductVariation, SyncOperation, User
-from ..schemas import SyncPushRequest
-from ..services.sales import create_sale, update_draft_sale
+from ..models import ChangeLog, Contact, Location, Product, ProductVariation, Sale, SyncOperation, User
+from ..schemas import SaleCreate, SaleDelete, SyncPushRequest
+from ..services.sales import create_sale, update_draft_sale, void_sale
 from .deps import current_user
 from .pos import product_payload
 
@@ -38,13 +38,29 @@ def push(payload: SyncPushRequest, user: User = Depends(current_user), db: Sessi
         if existing:
             results.append(existing.result)
             continue
-        sale_payload = operation.payload.model_copy(update={
-            "client_transaction_id": operation.entity_id,
-            "device_id": payload.device_id,
-        })
-        sale = update_draft_sale(db, user, sale_payload) if operation.action == "update" else create_sale(db, user, sale_payload)
+        if operation.action == "delete":
+            delete_payload = operation.payload
+            if not isinstance(delete_payload, SaleDelete):
+                raise ValueError("Payload penghapusan transaksi tidak valid.")
+            sale = db.scalar(select(Sale).where(
+                Sale.business_id == user.business_id,
+                Sale.client_transaction_id == str(operation.entity_id),
+            ))
+            if not sale:
+                raise ValueError("Transaksi yang akan dihapus belum tersedia di server.")
+            sale = void_sale(db, user, sale, delete_payload.reason)
+        else:
+            sale_payload = operation.payload
+            if not isinstance(sale_payload, SaleCreate):
+                raise ValueError("Payload transaksi tidak valid.")
+            sale_payload = sale_payload.model_copy(update={
+                "client_transaction_id": operation.entity_id,
+                "device_id": payload.device_id,
+            })
+            sale = update_draft_sale(db, user, sale_payload) if operation.action == "update" else create_sale(db, user, sale_payload)
         result = {
             "operation_id": operation_id, "status": "applied", "entity": "sale",
+            "action": operation.action,
             "entity_id": str(operation.entity_id), "server_id": sale.id,
             "invoice_no": sale.invoice_no, "revision": sale.revision,
         }

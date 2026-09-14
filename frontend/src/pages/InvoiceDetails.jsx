@@ -126,6 +126,7 @@ export default function InvoiceDetails() {
   const [thermalBusy, setThermalBusy] = useState(false);
   const [thermalStatus, setThermalStatus] = useState("");
   const [printChoiceOpen, setPrintChoiceOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     const fetchInvoice = async () => {
@@ -184,6 +185,27 @@ export default function InvoiceDetails() {
     if (!canvas) return;
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     if (blob) await saveBlob(blob, `Nota-${invoice.invoice_no}.png`);
+  };
+
+  const handleDelete = async () => {
+    const reason = window.prompt("Alasan penghapusan transaksi:", "Transaksi salah");
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      setError("Alasan penghapusan minimal 3 karakter.");
+      return;
+    }
+    if (!window.confirm(`Hapus transaksi ${invoice.invoice_no}? Stok akan dikembalikan dan nomor invoice tidak dapat dipakai ulang.`)) return;
+    setDeleteBusy(true);
+    setError(null);
+    try {
+      await posApi.remove(invoice.id, reason.trim());
+      navigate("/pos", { replace: true });
+    } catch (deleteError) {
+      const detail = deleteError.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : detail?.message || deleteError.message || "Transaksi gagal dihapus.");
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   const handleDownloadPDF = async (print = false) => {
@@ -345,16 +367,26 @@ export default function InvoiceDetails() {
           >
             <span>←</span> Kembali
           </button>
-          {isDraft && <button
-            type="button"
-            onClick={() => {
-              const source = invoice._source_user || searchParams.get("source");
-              navigate(`/pos/${invoice.id}/edit${source ? `?source=${encodeURIComponent(source)}` : ""}`);
-            }}
-            className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-[#0067b8] transition hover:bg-blue-100"
-          >
-            Edit di POS
-          </button>}
+          <div className="flex items-center gap-2">
+            {isDraft && <button
+              type="button"
+              onClick={() => {
+                const source = invoice._source_user || searchParams.get("source");
+                navigate(`/pos/${invoice.id}/edit${source ? `?source=${encodeURIComponent(source)}` : ""}`);
+              }}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-[#0067b8] transition hover:bg-blue-100"
+            >
+              Edit di POS
+            </button>}
+            <button
+              type="button"
+              disabled={deleteBusy}
+              onClick={handleDelete}
+              className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+            >
+              {deleteBusy ? "Menghapus…" : "Hapus"}
+            </button>
+          </div>
         </div>
 
         {/* HEADER INVOICE */}

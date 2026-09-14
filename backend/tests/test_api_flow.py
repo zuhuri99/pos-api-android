@@ -69,6 +69,49 @@ def test_product_sale_and_idempotent_offline_sync():
         assert stock.status_code == 200
         assert stock.json()["data"][0]["stock"] == "8.0000"
 
+        sale_id = first.json()["data"]["results"][0]["server_id"]
+        delete_operation_id = str(uuid4())
+        delete_body = {
+            "device_id": "test-device",
+            "operations": [{
+                "operation_id": delete_operation_id,
+                "entity": "sale",
+                "action": "delete",
+                "entity_id": entity_id,
+                "base_revision": 1,
+                "payload": {"reason": "Salah input barang"},
+            }],
+        }
+        synced_delete = client.post("/api/v1/sync/push", headers=headers, json=delete_body)
+        synced_delete_retry = client.post("/api/v1/sync/push", headers=headers, json=delete_body)
+        assert synced_delete.status_code == 200, synced_delete.text
+        assert synced_delete.json() == synced_delete_retry.json()
+        assert synced_delete.json()["data"]["results"][0]["action"] == "delete"
+
+        # Endpoint langsung tetap idempotent setelah void dari sinkronisasi.
+        deleted = client.request(
+            "DELETE",
+            f"/api/v1/income/pos/transactions/{sale_id}",
+            headers=headers,
+            json={"reason": "Salah input barang"},
+        )
+        assert deleted.status_code == 200, deleted.text
+        assert deleted.json()["data"]["status"] == "void"
+        assert deleted.json()["data"]["void_reason"] == "Salah input barang"
+
+        # Retry delete bersifat idempotent dan tidak menggandakan pengembalian stok.
+        retried = client.request(
+            "DELETE",
+            f"/api/v1/income/pos/transactions/{sale_id}",
+            headers=headers,
+            json={"reason": "Salah input barang"},
+        )
+        assert retried.status_code == 200
+        restored = client.get("/api/v1/pos-data/product-stock-report?location_id=1", headers=headers)
+        assert restored.json()["data"][0]["stock"] == "10.0000"
+        active_sales = client.get("/api/v1/income/lite", headers=headers).json()["data"]["admin"]
+        assert active_sales == []
+
 
 def test_client_invoice_requires_device_reservation():
     with TestClient(app) as client:

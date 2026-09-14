@@ -168,6 +168,36 @@ async function applySaleStock(db, data, payload) {
   }
 }
 
+async function restoreSaleStock(db, data, payload) {
+  if (payload.status !== "final") return;
+  for (const line of payload.products || []) {
+    const product = data
+      ? data.products.find((row) => Number(row.id) === Number(line.product_id))
+      : null;
+    let nativeProduct = product;
+    if (!data) {
+      const row = (await db.query({ statement: "SELECT payload FROM products WHERE id=?", values: [Number(line.product_id)] })).values?.[0];
+      nativeProduct = row ? JSON.parse(row.payload) : null;
+    }
+    if (!nativeProduct || Number(nativeProduct.enable_stock) !== 1) continue;
+    nativeProduct = {
+      ...nativeProduct,
+      product_variations: (nativeProduct.product_variations || []).map((group) => ({
+        ...group,
+        variations: (group.variations || []).map((variation) => Number(variation.id) !== Number(line.variation_id) ? variation : ({
+          ...variation,
+          variation_location_details: (variation.variation_location_details || []).map((location) => Number(location.location_id) !== Number(payload.location_id) ? location : ({
+            ...location,
+            qty_available: String(Number(location.qty_available || 0) + Number(line.quantity || 0)),
+          })),
+        })),
+      })),
+    };
+    if (data) data.products = data.products.map((row) => row.id === nativeProduct.id ? nativeProduct : row);
+    else await db.run({ statement: "UPDATE products SET payload=? WHERE id=?", values: [JSON.stringify(nativeProduct), nativeProduct.id] });
+  }
+}
+
 const parseRows = (rows) => (rows || []).map((row) => JSON.parse(row.payload));
 
 export async function getCatalogBootstrap() {
@@ -298,13 +328,58 @@ export async function getLocalSale(id) {
 export async function listLocalSales(year) {
   const db = await nativeDb();
   const rows = !db ? readWeb().sales : (await db.query({ statement: "SELECT payload,state,server_id,last_error FROM sales ORDER BY transaction_date DESC" })).values || [];
-  return rows.map((row) => ({ ...(typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload), id: row.server_id || row.local_id, sync_state: row.state })).filter((row) => !year || String(row.transaction_date).startsWith(String(year)));
+  return rows.map((row) => ({ ...(typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload), id: row.server_id || row.local_id, sync_state: row.state }))
+    .filter((row) => row.status !== "void" && (!year || String(row.transaction_date).startsWith(String(year))));
+}
+
+export async function queueLocalSaleDelete(id, reason = "Transaksi salah") {
+  const operationId = crypto.randomUUID();
+  const db = await nativeDb();
+  if (!db) {
+    const data = readWeb();
+    const sale = data.sales.find((row) => row.local_id === String(id) || String(row.server_id) === String(id));
+    if (!sale) throw new Error("Transaksi tidak ditemukan di perangkat.");
+    if (sale.payload.status === "void") return sale.payload;
+    await restoreSaleStock(null, data, sale.payload);
+    sale.state = "pending_delete";
+    sale.payload = { ...sale.payload, status: "void", payment_status: "void", void_reason: reason, sync_state: "pending_delete" };
+    data.outbox.push({ operation_id: operationId, entity_id: sale.local_id, action: "delete", payload: { reason }, attempts: 0, created_at: new Date().toISOString() });
+    writeWeb(data);
+    return sale.payload;
+  }
+  await db.beginTransaction();
+  try {
+    const row = (await db.query({ statement: "SELECT local_id,payload FROM sales WHERE local_id=? OR server_id=? LIMIT 1", values: [String(id), Number(id) || -1] })).values?.[0];
+    if (!row) throw new Error("Transaksi tidak ditemukan di perangkat.");
+    const original = JSON.parse(row.payload);
+    if (original.status === "void") { await db.commitTransaction(); return original; }
+    await restoreSaleStock(db, null, original);
+    const stored = { ...original, status: "void", payment_status: "void", void_reason: reason, sync_state: "pending_delete" };
+    await db.run({ statement: "UPDATE sales SET state='pending_delete',payload=?,last_error=NULL WHERE local_id=?", values: [JSON.stringify(stored), row.local_id] });
+    await db.run({ statement: "INSERT INTO outbox(operation_id,entity_id,action,payload,created_at) VALUES (?,?,?,?,?)", values: [operationId, row.local_id, "delete", JSON.stringify({ reason }), new Date().toISOString()] });
+    await db.commitTransaction();
+    return stored;
+  } catch (error) {
+    await db.rollbackTransaction();
+    throw error;
+  }
+}
+
+export async function applyRemoteSaleDelete(change) {
+  const db = await nativeDb();
+  const clientId = String(change.client_transaction_id || "");
+  if (!db) {
+    const data = readWeb();
+    data.sales = data.sales.filter((row) => row.local_id !== clientId && Number(row.server_id) !== Number(change.id));
+    writeWeb(data); return;
+  }
+  await db.run({ statement: "DELETE FROM sales WHERE local_id=? OR server_id=?", values: [clientId, Number(change.id) || -1] });
 }
 
 export async function pendingOperations() {
   const db = await nativeDb();
   if (!db) return readWeb().outbox;
-  return ((await db.query({ statement: "SELECT * FROM outbox ORDER BY created_at LIMIT 100" })).values || []).map((row) => ({ ...row, payload: JSON.parse(row.payload) }));
+  return ((await db.query({ statement: "SELECT * FROM outbox ORDER BY created_at,rowid LIMIT 100" })).values || []).map((row) => ({ ...row, payload: JSON.parse(row.payload) }));
 }
 
 export async function markOperationSynced(operationId, result) {
@@ -314,14 +389,18 @@ export async function markOperationSynced(operationId, result) {
     const operation = data.outbox.find((row) => row.operation_id === operationId);
     data.outbox = data.outbox.filter((row) => row.operation_id !== operationId);
     const sale = data.sales.find((row) => row.local_id === operation?.entity_id);
-    if (sale) { sale.server_id = result.server_id; sale.state = "synced"; sale.payload = { ...sale.payload, id: result.server_id, invoice_no: result.invoice_no, revision: result.revision, sync_state: "synced" }; }
+    if (operation?.action === "delete") data.sales = data.sales.filter((row) => row.local_id !== operation.entity_id);
+    else if (sale) { sale.server_id = result.server_id; sale.state = "synced"; sale.payload = { ...sale.payload, id: result.server_id, invoice_no: result.invoice_no, revision: result.revision, sync_state: "synced" }; }
     writeWeb(data); return;
   }
-  const operation = (await db.query({ statement: "SELECT entity_id FROM outbox WHERE operation_id=?", values: [operationId] })).values?.[0];
+  const operation = (await db.query({ statement: "SELECT entity_id,action FROM outbox WHERE operation_id=?", values: [operationId] })).values?.[0];
   if (operation) {
-    const existing = await getLocalSale(operation.entity_id);
-    const updated = { ...existing, id: result.server_id, invoice_no: result.invoice_no, revision: result.revision, sync_state: "synced" };
-    await db.run({ statement: "UPDATE sales SET server_id=?,invoice_no=?,state='synced',payload=?,last_error=NULL WHERE local_id=?", values: [result.server_id, result.invoice_no, JSON.stringify(updated), operation.entity_id] });
+    if (operation.action === "delete") await db.run({ statement: "DELETE FROM sales WHERE local_id=?", values: [operation.entity_id] });
+    else {
+      const existing = await getLocalSale(operation.entity_id);
+      const updated = { ...existing, id: result.server_id, invoice_no: result.invoice_no, revision: result.revision, sync_state: "synced" };
+      await db.run({ statement: "UPDATE sales SET server_id=?,invoice_no=?,state='synced',payload=?,last_error=NULL WHERE local_id=?", values: [result.server_id, result.invoice_no, JSON.stringify(updated), operation.entity_id] });
+    }
   }
   await db.run({ statement: "DELETE FROM outbox WHERE operation_id=?", values: [operationId] });
 }

@@ -6,6 +6,7 @@ import {
   getLocalSale,
   getLocalStock,
   listLocalSales,
+  queueLocalSaleDelete,
   saveLocalSale,
   searchLocalProducts,
   takeInvoiceNumber,
@@ -124,5 +125,18 @@ export const posApi = {
     const local = await saveLocalSale({ ...existing, ...payload, products: await hydrateProducts(payload.products) }, "update", existing.client_transaction_id);
     if (navigator.onLine) syncNow().catch(() => {});
     return response(local, { success: true });
+  },
+  async remove(id, reason) {
+    const existing = await getLocalSale(String(id));
+    if (existing) {
+      const local = await queueLocalSaleDelete(String(id), reason);
+      if (navigator.onLine) syncNow().catch(() => {});
+      return response(local, { success: true });
+    }
+    if (!navigator.onLine) throw new Error("Transaksi tidak tersedia di perangkat untuk dihapus secara offline.");
+    return incomeApi.delete(`/income/pos/transactions/${id}`, {
+      data: { reason },
+      skipIncomeFallback: true,
+    });
   },
 };

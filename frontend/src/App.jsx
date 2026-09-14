@@ -25,6 +25,7 @@ export default function App() {
           <Route path="/pos/:id/edit" element={<ProtectedRoute><PosTransactionForm /></ProtectedRoute>} />
           <Route path="/invoice/:id" element={<ProtectedRoute><InvoiceDetails /></ProtectedRoute>} />
           <Route path="/products/transfer" element={<ProtectedRoute><ProductTransfer /></ProtectedRoute>} />
+          <Route path="/admin/products" element={<ProtectedRoute><ProductTransfer /></ProtectedRoute>} />
           <Route path="/sync" element={<ProtectedRoute><SyncStatus /></ProtectedRoute>} />
           <Route path="/settings/printer" element={<ProtectedRoute><ThermalPrinterSettings /></ProtectedRoute>} />
           <Route path="*" element={<Navigate replace to="/pos" />} />

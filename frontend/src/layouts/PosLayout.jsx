@@ -4,7 +4,7 @@ import { logout } from "../utils/auth";
 
 const links = [
   ["/pos", "Kasir"],
-  ["/products/transfer", "Produk"],
+  ["/admin/products", "Produk"],
   ["/sync", "Sinkronisasi"],
   ["/settings/printer", "Printer"],
 ];

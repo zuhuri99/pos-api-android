@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
+import os
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import select, text
@@ -45,7 +48,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
     expose_headers=["Content-Disposition"],
 )
@@ -63,3 +66,20 @@ def health():
     except Exception as exc:
         raise HTTPException(503, "Database tidak tersedia.") from exc
     return {"status": "ok", "database": "ok"}
+
+
+FRONTEND_DIR = Path(os.getenv("FRONTEND_DIR", "/app/frontend_dist")).resolve()
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def frontend_app(full_path: str):
+    """Layani build React dan fallback BrowserRouter tanpa menutupi 404 API."""
+    if full_path.startswith(("api/", "docs", "redoc", "openapi.json")):
+        raise HTTPException(404, "Endpoint tidak ditemukan.")
+    candidate = (FRONTEND_DIR / full_path).resolve()
+    if candidate.is_relative_to(FRONTEND_DIR) and candidate.is_file():
+        return FileResponse(candidate)
+    index = FRONTEND_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
+    raise HTTPException(404, "Frontend belum dibangun.")

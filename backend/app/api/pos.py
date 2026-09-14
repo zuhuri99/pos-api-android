@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..core.db import get_db
 from ..models import Contact, InventoryBalance, Location, Product, ProductVariation, Sale, User
-from ..schemas import InvoiceReservationRequest, SaleCreate
+from ..schemas import InvoiceReservationRequest, SaleCreate, SaleDelete
 from ..services.invoices import reserve_invoice_numbers
-from ..services.sales import create_sale, get_sale, serialize_sale, update_draft_sale
+from ..services.sales import create_sale, get_sale, serialize_sale, update_draft_sale, void_sale
 from .deps import current_user
 
 router = APIRouter(prefix="/api/v1", tags=["pos"])
@@ -143,12 +143,25 @@ def invoice(sale_id: int, user: User = Depends(current_user), db: Session = Depe
     return {"success": True, "data": data}
 
 
+@router.delete("/income/pos/transactions/{sale_id}")
+def delete_transaction(
+    sale_id: int,
+    payload: SaleDelete | None = None,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    sale = get_sale(db, user.business_id, sale_id)
+    sale = void_sale(db, user, sale, (payload or SaleDelete()).reason)
+    db.commit()
+    return {"success": True, "data": serialize_sale(sale)}
+
+
 @router.get("/income/lite")
 def income_lite(
     start_date: datetime | None = None, end_date: datetime | None = None,
     user: User = Depends(current_user), db: Session = Depends(get_db),
 ):
-    query = select(Sale).where(Sale.business_id == user.business_id)
+    query = select(Sale).where(Sale.business_id == user.business_id, Sale.status != "void")
     if start_date:
         query = query.where(Sale.transaction_date >= start_date)
     if end_date:

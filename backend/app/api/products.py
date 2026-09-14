@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..core.db import get_db
 from ..models import ChangeLog, InventoryBalance, Product, ProductVariation, User
 from ..schemas import ProductImportCommit, ProductImportRow
-from .deps import current_user
+from .deps import current_admin
 from .pos import product_payload
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
@@ -60,7 +60,7 @@ def parse_rows(filename: str, content: bytes) -> tuple[list[dict], list[dict]]:
 
 
 @router.post("/import/preview")
-async def preview(file: UploadFile = File(...), user: User = Depends(current_user)):
+async def preview(file: UploadFile = File(...), user: User = Depends(current_admin)):
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(413, "Ukuran file maksimum 10 MB.")
@@ -71,7 +71,7 @@ async def preview(file: UploadFile = File(...), user: User = Depends(current_use
 
 
 @router.post("/import/commit")
-def commit(payload: ProductImportCommit, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def commit(payload: ProductImportCommit, user: User = Depends(current_admin), db: Session = Depends(get_db)):
     from ..models import Location
     if not db.scalar(select(Location.id).where(Location.id == payload.location_id, Location.business_id == user.business_id)):
         raise HTTPException(422, "Lokasi import tidak ditemukan.")
@@ -110,7 +110,7 @@ def commit(payload: ProductImportCommit, user: User = Depends(current_user), db:
 
 
 @router.get("/export")
-def export_products(user: User = Depends(current_user), db: Session = Depends(get_db)):
+def export_products(user: User = Depends(current_admin), db: Session = Depends(get_db)):
     products = db.scalars(select(Product).options(joinedload(Product.variations).joinedload(ProductVariation.balances)).where(Product.business_id == user.business_id)).unique().all()
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=FIELDS)

@@ -8,7 +8,13 @@ Format nomor: `P{bulan 2 digit}{tahun 4 digit}{urutan 4 digit}`. Contoh transaks
 
 ## Deployment production Coolify
 
-Production menggunakan `https://pos2.asas.id`. Compose root hanya membangun service API dan menggunakan PostgreSQL 16 yang sudah ada melalui variabel `DATABASE_URL`; tidak ada container atau volume database baru.
+Production menggunakan `https://pos2.asas.id`. Satu image Coolify membangun frontend React dan backend FastAPI; FastAPI menyajikan aplikasi web sekaligus API. Compose menggunakan PostgreSQL 16 yang sudah ada melalui variabel `DATABASE_URL`; tidak ada container atau volume database baru.
+
+Alamat utama:
+
+- Admin produk web: `https://pos2.asas.id/admin/products`
+- Kasir web: `https://pos2.asas.id/pos`
+- Dokumentasi API: `https://pos2.asas.id/docs`
 
 Petunjuk lengkap tersedia di [COOLIFY.md](./COOLIFY.md). Template variabel tersedia di `.env.coolify.example`.
 
@@ -45,9 +51,10 @@ APK Android harus menggunakan endpoint HTTPS. Login pertama dan pengisian katalo
 - Setiap transaksi mempunyai UUID perangkat dan setiap operasi mempunyai UUID unik.
 - Retry request tidak membuat transaksi ganda.
 - Transaksi disimpan lokal sebelum dikirim ke server.
-- Transaksi final immutable; koreksi akan dikembangkan melalui void/reversal.
+- Transaksi final tidak dapat diedit; penghapusan dilakukan sebagai void yang mengembalikan stok dan tetap menyimpan audit.
 - Server memvalidasi stok. Konflik stok ditampilkan sebagai transaksi yang perlu diperiksa.
 - Cursor sinkronisasi berasal dari sequence server, bukan jam perangkat.
+- Tombol **Hapus** pada detail nota membuat void: stok dikembalikan, alasan dicatat, nomor invoice tetap terpakai, dan operasi dapat diantrekan saat offline.
 
 ## Import produk
 

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -57,6 +58,9 @@ def serialize_sale(sale: Sale, contact_name: str | None = None) -> dict:
         "final_total": str(sale.final_total),
         "sale_note": sale.sale_note,
         "revision": sale.revision,
+        "voided_at": sale.voided_at.isoformat() if sale.voided_at else None,
+        "voided_by": sale.voided_by,
+        "void_reason": sale.void_reason,
         "products": [
             {
                 "sell_line_id": line.id,
@@ -228,3 +232,75 @@ def update_draft_sale(db: Session, user: User, data: SaleCreate) -> Sale:
     replacement.revision = sale.revision + 1
     db.flush()
     return replacement
+
+
+def void_sale(db: Session, user: User, sale: Sale, reason: str) -> Sale:
+    """Batalkan transaksi tanpa menghilangkan jejak audit dan pulihkan stoknya."""
+    if sale.status == "void":
+        return get_sale(db, user.business_id, sale.id)
+
+    if sale.status == "final":
+        for line in sale.lines:
+            balance = db.scalar(
+                select(InventoryBalance)
+                .where(
+                    InventoryBalance.business_id == user.business_id,
+                    InventoryBalance.location_id == sale.location_id,
+                    InventoryBalance.variation_id == line.variation_id,
+                )
+                .with_for_update()
+            )
+            if not balance:
+                raise HTTPException(409, {
+                    "code": "inventory_balance_missing",
+                    "variation_id": line.variation_id,
+                })
+            balance.quantity += line.quantity
+            balance.revision += 1
+            db.add(StockMovement(
+                business_id=user.business_id,
+                location_id=sale.location_id,
+                variation_id=line.variation_id,
+                sale_uuid=sale.uuid,
+                quantity_delta=line.quantity,
+                reason="sale_void",
+            ))
+            db.add(ChangeLog(
+                business_id=user.business_id,
+                entity_type="inventory",
+                entity_uuid=f"{sale.location_id}:{line.variation_id}",
+                action="upsert",
+                revision=balance.revision,
+                payload={
+                    "location_id": sale.location_id,
+                    "variation_id": line.variation_id,
+                    "quantity": str(balance.quantity),
+                    "revision": balance.revision,
+                },
+            ))
+
+    sale.status = "void"
+    sale.payment_status = "void"
+    sale.voided_at = datetime.now(timezone.utc)
+    sale.voided_by = user.id
+    sale.void_reason = reason.strip()
+    sale.revision += 1
+    db.flush()
+    db.add(ChangeLog(
+        business_id=user.business_id,
+        entity_type="sale",
+        entity_uuid=sale.uuid,
+        action="delete",
+        revision=sale.revision,
+        payload={
+            "id": sale.id,
+            "uuid": sale.uuid,
+            "client_transaction_id": sale.client_transaction_id,
+            "invoice_no": sale.invoice_no,
+            "status": "void",
+            "void_reason": sale.void_reason,
+            "revision": sale.revision,
+        },
+    ))
+    db.flush()
+    return get_sale(db, user.business_id, sale.id)

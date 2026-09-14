@@ -33,13 +33,19 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
     payments: [{ amount: 10000, method: "cash" }],
   });
   assert.equal((await store.getLocalStock(1))[0].stock, "8");
+  await store.queueLocalSaleDelete(sale.client_transaction_id, "Salah input barang");
+  assert.equal((await store.getLocalStock(1))[0].stock, "10");
+  assert.equal((await store.listLocalSales()).length, 0);
   const operations = await store.pendingOperations();
-  assert.equal(operations.length, 1);
+  assert.equal(operations.length, 2);
 
   await store.markOperationSynced(operations[0].operation_id, {
     server_id: 99, invoice_no: invoice, revision: 1,
   });
+  assert.equal((await store.pendingOperations()).length, 1);
+  await store.markOperationSynced(operations[1].operation_id, {
+    server_id: 99, invoice_no: invoice, revision: 2,
+  });
   assert.equal((await store.pendingOperations()).length, 0);
-  assert.equal((await store.getLocalSale(sale.client_transaction_id)).id, 99);
+  assert.equal(await store.getLocalSale(sale.client_transaction_id), null);
 });
-
