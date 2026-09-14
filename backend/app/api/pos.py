@@ -90,7 +90,7 @@ def stock_report(
         select(InventoryBalance, ProductVariation, Product)
         .join(ProductVariation, InventoryBalance.variation_id == ProductVariation.id)
         .join(Product, ProductVariation.product_id == Product.id)
-        .where(Product.business_id == user.business_id)
+        .where(Product.business_id == user.business_id, Product.is_active.is_(True))
     )
     if location_id:
         query = query.where(InventoryBalance.location_id == location_id)
@@ -216,6 +216,7 @@ def invoice(sale_id: int, user: User = Depends(current_user), db: Session = Depe
 def mark_transaction(
     sale_id: int,
     payload: SaleMark,
+    background_tasks: BackgroundTasks,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
@@ -223,7 +224,13 @@ def mark_transaction(
     db.commit()
     contact = db.get(Contact, sale.contact_id)
     cashier = db.scalar(select(User.username).where(User.id == sale.created_by))
-    return {"success": True, "data": serialize_sale(sale, contact.name if contact else None, cashier)}
+    data = serialize_sale(sale, contact.name if contact else None, cashier)
+    if not user.is_admin:
+        queue_transaction_notification(
+            background_tasks, "mark", data, user.username,
+            f"pos-mark-{sale.uuid}-{sale.revision}",
+        )
+    return {"success": True, "data": data}
 
 
 @router.delete("/income/pos/transactions/{sale_id}")

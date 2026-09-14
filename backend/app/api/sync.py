@@ -82,7 +82,7 @@ def push(
             entity_type="sale", entity_uuid=str(operation.entity_id), result=result,
         ))
         results.append(result)
-        if not user.is_admin and operation.action in {"create", "update", "delete"}:
+        if not user.is_admin and operation.action in {"create", "update", "delete", "mark"}:
             contact = db.get(Contact, sale.contact_id)
             notifications.append((
                 operation.action,

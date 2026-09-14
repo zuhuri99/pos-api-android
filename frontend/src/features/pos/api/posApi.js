@@ -10,6 +10,7 @@ import {
   listLocalSales,
   queueLocalSaleMark,
   queueLocalSaleDelete,
+  recordSaleActivity,
   saveLocalSale,
   searchLocalProducts,
   peekInvoiceNumber,
@@ -158,10 +159,17 @@ export const posApi = {
     }
     if (!navigator.onLine) throw new Error("Transaksi ini belum tersimpan di perangkat dan hanya dapat diedit saat online.");
     const current = await incomeApi.get(`/income/pos/transactions/${id}`, { skipIncomeFallback: true });
-    return incomeApi.put(`/income/pos/transactions/${id}`, {
+    const updated = await incomeApi.put(`/income/pos/transactions/${id}`, {
       ...current.data?.data,
       ...payload,
     }, { skipIncomeFallback: true });
+    const sale = updated.data?.data || {};
+    await recordSaleActivity({
+      entity_id: sale.client_transaction_id || id,
+      invoice_no: sale.invoice_no || current.data?.data?.invoice_no || "-",
+      action: "update",
+    });
+    return updated;
   },
   async remove(id, reason, pin) {
     const existing = await getLocalSale(String(id));
@@ -179,6 +187,12 @@ export const posApi = {
         skipIncomeFallback: true,
       });
       await applyRemoteSaleDelete(removed.data?.data || { id: serverId });
+      const sale = removed.data?.data || {};
+      await recordSaleActivity({
+        entity_id: sale.client_transaction_id || existing?.client_transaction_id || serverId,
+        invoice_no: sale.invoice_no || existing?.invoice_no || "-",
+        action: "delete",
+      });
       return removed;
     }
     if (existing) {
@@ -187,10 +201,17 @@ export const posApi = {
       return response(local, { success: true });
     }
     if (!navigator.onLine) throw new Error("Transaksi tidak tersedia di perangkat untuk dihapus secara offline.");
-    return incomeApi.delete(`/income/pos/transactions/${id}`, {
+    const removed = await incomeApi.delete(`/income/pos/transactions/${id}`, {
       data: { reason },
       skipIncomeFallback: true,
     });
+    const sale = removed.data?.data || {};
+    await recordSaleActivity({
+      entity_id: sale.client_transaction_id || id,
+      invoice_no: sale.invoice_no || "-",
+      action: "delete",
+    });
+    return removed;
   },
   async mark(id, markType, reason) {
     const existing = await getLocalSale(String(id));
@@ -200,9 +221,16 @@ export const posApi = {
       return response(local, { success: true });
     }
     if (!navigator.onLine) throw new Error("Transaksi tidak tersedia di perangkat untuk ditandai secara offline.");
-    return incomeApi.patch(`/income/pos/transactions/${id}/mark`, {
+    const marked = await incomeApi.patch(`/income/pos/transactions/${id}/mark`, {
       mark_type: markType,
       reason,
     }, { skipIncomeFallback: true });
+    const sale = marked.data?.data || {};
+    await recordSaleActivity({
+      entity_id: sale.client_transaction_id || id,
+      invoice_no: sale.invoice_no || "-",
+      action: "mark",
+    });
+    return marked;
   },
 };

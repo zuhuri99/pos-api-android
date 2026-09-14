@@ -71,6 +71,19 @@ def test_product_sale_and_idempotent_offline_sync():
         })
         assert imported.status_code == 200, imported.text
 
+        imported_inactive = client.post("/api/v1/products/import/commit", headers=headers, json={
+            "location_id": 1,
+            "rows": [{
+                "sku": "SKU-INACTIVE", "name": "Produk Nonaktif", "variation_name": "DUMMY",
+                "variation_sku": "SKU-INACTIVE", "selling_price": "12000",
+                "initial_stock": "5", "enable_stock": True, "is_active": False,
+            }],
+        })
+        assert imported_inactive.status_code == 200, imported_inactive.text
+        hidden_product = client.get("/api/v1/income/pos/products?sku=SKU-INACTIVE", headers=headers)
+        assert hidden_product.status_code == 200
+        assert hidden_product.json()["data"] == []
+
         exported = client.get("/api/v1/products/export", headers=headers)
         assert exported.status_code == 200
         assert "SKU-TEST" in exported.content.decode("utf-8-sig")

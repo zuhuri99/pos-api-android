@@ -17,6 +17,7 @@ ACTION_LABELS = {
     "create": "Transaksi baru",
     "update": "Transaksi diedit",
     "delete": "Transaksi dihapus",
+    "mark": "Transaksi ditandai",
 }
 
 
@@ -136,12 +137,19 @@ def _email_payload(
     ]
     if action == "delete":
         rows.append(("Alasan hapus", reason))
+    if action == "mark":
+        mark_type = "Transaksi salah" if sale.get("mark_type") == "wrong" else "Lainnya"
+        rows.extend([
+            ("Ditandai sebagai", mark_type),
+            ("Alasan tanda", str(sale.get("mark_reason") or "-")),
+            ("Waktu penandaan", str(sale.get("marked_at") or "-")),
+        ])
     table = "".join(
         f'<tr><td style="padding:7px 12px;color:#64748b">{html.escape(key)}</td>'
         f'<td style="padding:7px 12px;font-weight:700;color:#0f172a">{html.escape(value)}</td></tr>'
         for key, value in rows
     )
-    details = _transaction_details_html(sale) if action in {"create", "update"} else ""
+    details = _transaction_details_html(sale) if action in {"create", "update", "mark"} else ""
     return {
         "from": settings.resend_from_email,
         "to": settings.transaction_notification_emails,

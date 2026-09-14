@@ -18,6 +18,7 @@ import {
 
 let syncPromise;
 let listener;
+const CATALOG_CACHE_VERSION = "active-products-v2";
 
 async function deviceId() {
   const info = await getLoginDeviceInfo();
@@ -38,11 +39,15 @@ export async function syncNow() {
   syncPromise = (async () => {
     await initializeLocalStore();
     if (!getAuthToken() || !navigator.onLine) return { online: false };
-    const lastBootstrap = await getMeta("bootstrapped");
-    if (!lastBootstrap) {
+    const [lastBootstrap, catalogVersion] = await Promise.all([
+      getMeta("bootstrapped"),
+      getMeta("catalog_cache_version"),
+    ]);
+    if (!lastBootstrap || catalogVersion !== CATALOG_CACHE_VERSION) {
       const response = await incomeApi.get("/sync/bootstrap", { skipIncomeFallback: true });
       await replaceCatalog(response.data?.data || {});
       await setMeta("bootstrapped", "1");
+      await setMeta("catalog_cache_version", CATALOG_CACHE_VERSION);
     }
     await replenishInvoices().catch(() => {});
     const operations = await pendingOperations();

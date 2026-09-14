@@ -28,9 +28,15 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
         id: 20, name: "DUMMY", sub_sku: "SKU-2", sell_price_inc_tax: "7000",
         variation_location_details: [{ location_id: 1, qty_available: "5" }],
       }] }],
+    }, {
+      id: 3, name: "Produk Tanpa Status", sku: "SKU-3", enable_stock: 1,
+      product_variations: [],
+    }, {
+      id: 4, name: "Produk Aktif String", sku: "SKU-4", enable_stock: 1,
+      is_active: "true", product_variations: [],
     }],
   });
-  assert.deepEqual((await store.searchLocalProducts({ per_page: 100 })).map((product) => product.id), [1]);
+  assert.deepEqual((await store.searchLocalProducts({ per_page: 100 })).map((product) => product.id), [1, 4]);
   await store.addInvoiceNumbers(["P1020260001"]);
   const invoice = await store.peekInvoiceNumber("2026-10-14 10:00:00");
   assert.equal(invoice, "P1020260001");
@@ -63,8 +69,10 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
   assert.equal(syncStats.queue.length, 4);
   assert.equal(syncStats.queue[2].action, "mark");
   assert.equal(syncStats.queue[3].invoice_no, invoice);
-  assert.equal(syncStats.recent.length, 1);
-  assert.equal(syncStats.recent[0].sync_state, "pending_delete");
+  assert.equal(syncStats.recent.length, 4);
+  assert.equal(syncStats.recent[0].action, "delete");
+  assert.equal(syncStats.recent[0].status, "pending");
+  assert.ok(syncStats.recent[0].activity_at);
 
   await store.markOperationSynced(operations[0].operation_id, {
     server_id: 99, invoice_no: invoice, revision: 1,
@@ -83,4 +91,19 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
   });
   assert.equal((await store.pendingOperations()).length, 0);
   assert.equal(await store.getLocalSale(sale.client_transaction_id), null);
+  const completedStats = await store.offlineStats();
+  assert.equal(completedStats.recent.length, 4);
+  assert.ok(completedStats.recent.every((activity) => activity.status === "synced"));
+
+  await store.recordSaleActivity({
+    activity_id: "activity-newer", entity_id: "old-transaction", invoice_no: "NOTA-LAMA",
+    action: "update", activity_at: "2099-01-01T10:00:00.000Z",
+  });
+  await store.recordSaleActivity({
+    activity_id: "activity-older", entity_id: "new-transaction", invoice_no: "NOTA-BARU",
+    action: "create", activity_at: "2000-01-01T10:00:00.000Z",
+  });
+  const activityOrderedStats = await store.offlineStats();
+  assert.equal(activityOrderedStats.recent[0].invoice_no, "NOTA-LAMA");
+  assert.equal(activityOrderedStats.recent[0].action, "update");
 });

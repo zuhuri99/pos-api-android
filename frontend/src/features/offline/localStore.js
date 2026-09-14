@@ -2,7 +2,7 @@ import { isNative } from "../../platform/native.js";
 
 const WEB_KEY = "pos.offline.store.v1";
 const emptyWebStore = () => ({
-  meta: {}, products: [], contacts: [], locations: [], sales: [], outbox: [], invoices: [],
+  meta: {}, products: [], contacts: [], locations: [], sales: [], outbox: [], invoices: [], activities: [],
 });
 let connectionPromise;
 
@@ -11,9 +11,13 @@ const readWeb = () => {
   catch { return emptyWebStore(); }
 };
 const writeWeb = (data) => localStorage.setItem(WEB_KEY, JSON.stringify(data));
-const isActiveProduct = (product) => product?.is_active !== undefined
-  ? Number(product.is_active) === 1
-  : Number(product?.is_inactive || 0) !== 1;
+const trueFlag = (value) => value === true || value === 1
+  || ["1", "true", "yes", "ya", "aktif"].includes(String(value ?? "").trim().toLowerCase());
+const isActiveProduct = (product) => {
+  if (product?.is_active !== undefined && product?.is_active !== null) return trueFlag(product.is_active);
+  if (product?.is_inactive !== undefined && product?.is_inactive !== null) return !trueFlag(product.is_inactive);
+  return false;
+};
 
 async function nativeDb() {
   if (!isNative) return null;
@@ -46,6 +50,8 @@ async function nativeDb() {
         CREATE TABLE IF NOT EXISTS sales (local_id TEXT PRIMARY KEY NOT NULL, server_id INTEGER, invoice_no TEXT NOT NULL UNIQUE, transaction_date TEXT NOT NULL, state TEXT NOT NULL, payload TEXT NOT NULL, last_error TEXT);
         CREATE INDEX IF NOT EXISTS idx_sales_state ON sales(state);
         CREATE TABLE IF NOT EXISTS outbox (operation_id TEXT PRIMARY KEY NOT NULL, entity_id TEXT NOT NULL, action TEXT NOT NULL, payload TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT, created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS sale_activity (activity_id TEXT PRIMARY KEY NOT NULL, entity_id TEXT NOT NULL, invoice_no TEXT NOT NULL, action TEXT NOT NULL, status TEXT NOT NULL, activity_at TEXT NOT NULL, error TEXT);
+        CREATE INDEX IF NOT EXISTS idx_sale_activity_time ON sale_activity(activity_at);
         CREATE TABLE IF NOT EXISTS invoice_numbers (invoice_no TEXT PRIMARY KEY NOT NULL, period TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0);
         CREATE INDEX IF NOT EXISTS idx_invoice_available ON invoice_numbers(period, used, invoice_no);
       `);
@@ -70,6 +76,27 @@ export async function getMeta(key) {
   if (!db) return readWeb().meta[key] || "";
   const result = await db.query("SELECT value FROM meta WHERE key=?", [key]);
   return result.values?.[0]?.value || "";
+}
+
+export async function recordSaleActivity({
+  activity_id = crypto.randomUUID(), entity_id, invoice_no = "-", action,
+  status = "synced", activity_at = new Date().toISOString(), error = "",
+}) {
+  const activity = { activity_id, entity_id: String(entity_id), invoice_no, action, status, activity_at, error };
+  const db = await nativeDb();
+  if (!db) {
+    const data = readWeb();
+    data.activities = [activity, ...data.activities.filter((row) => row.activity_id !== activity_id)]
+      .sort((left, right) => String(right.activity_at).localeCompare(String(left.activity_at)))
+      .slice(0, 100);
+    writeWeb(data);
+    return activity;
+  }
+  await db.run(
+    "INSERT OR REPLACE INTO sale_activity(activity_id,entity_id,invoice_no,action,status,activity_at,error) VALUES (?,?,?,?,?,?,?)",
+    [activity.activity_id, activity.entity_id, activity.invoice_no, activity.action, activity.status, activity.activity_at, activity.error],
+  );
+  return activity;
 }
 
 export async function replaceCatalog({ products = [], contacts = [], locations = [], cursor = 0 }) {
@@ -340,7 +367,8 @@ async function claimInvoiceNumber(db, data, invoiceNo) {
 export async function saveLocalSale(payload, action = "create", localId = null) {
   const entityId = localId || payload.client_transaction_id || crypto.randomUUID();
   const operationId = crypto.randomUUID();
-  const stored = { ...payload, client_transaction_id: entityId, id: entityId, sync_state: "pending" };
+  const activityAt = new Date().toISOString();
+  const stored = { ...payload, client_transaction_id: entityId, id: entityId, sync_state: "pending", last_action: action, last_activity_at: activityAt };
   const db = await nativeDb();
   if (!db) {
     const data = readWeb();
@@ -349,7 +377,8 @@ export async function saveLocalSale(payload, action = "create", localId = null) 
     if (previous) await restoreSaleStock(null, data, previous.payload);
     await applySaleStock(null, data, stored);
     data.sales = [...data.sales.filter((row) => row.local_id !== entityId), { local_id: entityId, server_id: previous?.server_id || null, invoice_no: stored.invoice_no, transaction_date: stored.transaction_date, state: "pending", payload: stored }];
-    data.outbox.push({ operation_id: operationId, entity_id: entityId, action, payload: stored, attempts: 0, created_at: new Date().toISOString() });
+    data.outbox.push({ operation_id: operationId, entity_id: entityId, action, payload: stored, attempts: 0, created_at: activityAt });
+    data.activities = [{ activity_id: operationId, entity_id: entityId, invoice_no: stored.invoice_no, action, status: "pending", activity_at: activityAt, error: "" }, ...data.activities].slice(0, 100);
     writeWeb(data); return stored;
   }
   await db.beginTransaction();
@@ -359,7 +388,8 @@ export async function saveLocalSale(payload, action = "create", localId = null) 
     if (previousRow) await restoreSaleStock(db, null, JSON.parse(previousRow.payload));
     await applySaleStock(db, null, stored);
     await db.run("INSERT OR REPLACE INTO sales(local_id,server_id,invoice_no,transaction_date,state,payload,last_error) VALUES (?,COALESCE((SELECT server_id FROM sales WHERE local_id=?),NULL),?,?,?,?,NULL)", [entityId, entityId, stored.invoice_no, stored.transaction_date, "pending", JSON.stringify(stored)], false);
-    await db.run("INSERT INTO outbox(operation_id,entity_id,action,payload,created_at) VALUES (?,?,?,?,?)", [operationId, entityId, action, JSON.stringify(stored), new Date().toISOString()], false);
+    await db.run("INSERT INTO outbox(operation_id,entity_id,action,payload,created_at) VALUES (?,?,?,?,?)", [operationId, entityId, action, JSON.stringify(stored), activityAt], false);
+    await db.run("INSERT INTO sale_activity(activity_id,entity_id,invoice_no,action,status,activity_at,error) VALUES (?,?,?,?,?,?,?)", [operationId, entityId, stored.invoice_no, action, "pending", activityAt, ""], false);
     await db.commitTransaction();
     return stored;
   } catch (error) {
@@ -395,8 +425,9 @@ export async function queueLocalSaleMark(id, markType, reason) {
     const sale = data.sales.find((row) => row.local_id === String(id) || String(row.server_id) === String(id));
     if (!sale) throw new Error("Transaksi tidak ditemukan di perangkat.");
     sale.state = "pending_mark";
-    sale.payload = { ...sale.payload, marked_at: markedAt, mark_type: markType, mark_reason: reason, sync_state: "pending_mark" };
+    sale.payload = { ...sale.payload, marked_at: markedAt, mark_type: markType, mark_reason: reason, sync_state: "pending_mark", last_action: "mark", last_activity_at: markedAt };
     data.outbox.push({ operation_id: operationId, entity_id: sale.local_id, action: "mark", payload: markPayload, attempts: 0, created_at: markedAt });
+    data.activities = [{ activity_id: operationId, entity_id: sale.local_id, invoice_no: sale.invoice_no, action: "mark", status: "pending", activity_at: markedAt, error: "" }, ...data.activities].slice(0, 100);
     writeWeb(data);
     return sale.payload;
   }
@@ -404,9 +435,10 @@ export async function queueLocalSaleMark(id, markType, reason) {
   try {
     const row = (await db.query("SELECT local_id,payload FROM sales WHERE local_id=? OR server_id=? LIMIT 1", [String(id), Number(id) || -1])).values?.[0];
     if (!row) throw new Error("Transaksi tidak ditemukan di perangkat.");
-    const stored = { ...JSON.parse(row.payload), marked_at: markedAt, mark_type: markType, mark_reason: reason, sync_state: "pending_mark" };
+    const stored = { ...JSON.parse(row.payload), marked_at: markedAt, mark_type: markType, mark_reason: reason, sync_state: "pending_mark", last_action: "mark", last_activity_at: markedAt };
     await db.run("UPDATE sales SET state='pending_mark',payload=?,last_error=NULL WHERE local_id=?", [JSON.stringify(stored), row.local_id], false);
     await db.run("INSERT INTO outbox(operation_id,entity_id,action,payload,created_at) VALUES (?,?,?,?,?)", [operationId, row.local_id, "mark", JSON.stringify(markPayload), markedAt], false);
+    await db.run("INSERT INTO sale_activity(activity_id,entity_id,invoice_no,action,status,activity_at,error) VALUES (?,?,?,?,?,?,?)", [operationId, row.local_id, stored.invoice_no, "mark", "pending", markedAt, ""], false);
     await db.commitTransaction();
     return stored;
   } catch (error) {
@@ -417,6 +449,7 @@ export async function queueLocalSaleMark(id, markType, reason) {
 
 export async function queueLocalSaleDelete(id, reason = "Transaksi salah") {
   const operationId = crypto.randomUUID();
+  const activityAt = new Date().toISOString();
   const db = await nativeDb();
   if (!db) {
     const data = readWeb();
@@ -425,8 +458,9 @@ export async function queueLocalSaleDelete(id, reason = "Transaksi salah") {
     if (sale.payload.status === "void") return sale.payload;
     await restoreSaleStock(null, data, sale.payload);
     sale.state = "pending_delete";
-    sale.payload = { ...sale.payload, status: "void", payment_status: "void", void_reason: reason, sync_state: "pending_delete" };
-    data.outbox.push({ operation_id: operationId, entity_id: sale.local_id, action: "delete", payload: { reason }, attempts: 0, created_at: new Date().toISOString() });
+    sale.payload = { ...sale.payload, status: "void", payment_status: "void", void_reason: reason, sync_state: "pending_delete", last_action: "delete", last_activity_at: activityAt };
+    data.outbox.push({ operation_id: operationId, entity_id: sale.local_id, action: "delete", payload: { reason }, attempts: 0, created_at: activityAt });
+    data.activities = [{ activity_id: operationId, entity_id: sale.local_id, invoice_no: sale.invoice_no, action: "delete", status: "pending", activity_at: activityAt, error: "" }, ...data.activities].slice(0, 100);
     writeWeb(data);
     return sale.payload;
   }
@@ -437,9 +471,10 @@ export async function queueLocalSaleDelete(id, reason = "Transaksi salah") {
     const original = JSON.parse(row.payload);
     if (original.status === "void") { await db.commitTransaction(); return original; }
     await restoreSaleStock(db, null, original);
-    const stored = { ...original, status: "void", payment_status: "void", void_reason: reason, sync_state: "pending_delete" };
+    const stored = { ...original, status: "void", payment_status: "void", void_reason: reason, sync_state: "pending_delete", last_action: "delete", last_activity_at: activityAt };
     await db.run("UPDATE sales SET state='pending_delete',payload=?,last_error=NULL WHERE local_id=?", [JSON.stringify(stored), row.local_id], false);
-    await db.run("INSERT INTO outbox(operation_id,entity_id,action,payload,created_at) VALUES (?,?,?,?,?)", [operationId, row.local_id, "delete", JSON.stringify({ reason }), new Date().toISOString()], false);
+    await db.run("INSERT INTO outbox(operation_id,entity_id,action,payload,created_at) VALUES (?,?,?,?,?)", [operationId, row.local_id, "delete", JSON.stringify({ reason }), activityAt], false);
+    await db.run("INSERT INTO sale_activity(activity_id,entity_id,invoice_no,action,status,activity_at,error) VALUES (?,?,?,?,?,?,?)", [operationId, row.local_id, stored.invoice_no, "delete", "pending", activityAt, ""], false);
     await db.commitTransaction();
     return stored;
   } catch (error) {
@@ -472,11 +507,14 @@ export async function markOperationSynced(operationId, result) {
     const operation = data.outbox.find((row) => row.operation_id === operationId);
     data.outbox = data.outbox.filter((row) => row.operation_id !== operationId);
     const sale = data.sales.find((row) => row.local_id === operation?.entity_id);
+    const activity = data.activities.find((row) => row.activity_id === operationId);
+    if (activity) { activity.status = "synced"; activity.error = ""; }
     if (operation?.action === "delete") data.sales = data.sales.filter((row) => row.local_id !== operation.entity_id);
     else if (sale) { sale.server_id = result.server_id; sale.state = "synced"; sale.payload = { ...sale.payload, id: result.server_id, invoice_no: result.invoice_no, revision: result.revision, sync_state: "synced" }; }
     writeWeb(data); return;
   }
   const operation = (await db.query("SELECT entity_id,action FROM outbox WHERE operation_id=?", [operationId])).values?.[0];
+  await db.run("UPDATE sale_activity SET status='synced',error='' WHERE activity_id=?", [operationId]);
   if (operation) {
     if (operation.action === "delete") await db.run("DELETE FROM sales WHERE local_id=?", [operation.entity_id]);
     else {
@@ -492,11 +530,12 @@ export async function markOperationFailed(operationId, message) {
   const db = await nativeDb();
   if (!db) {
     const data = readWeb(); const operation = data.outbox.find((row) => row.operation_id === operationId);
-    if (operation) { operation.attempts += 1; operation.last_error = message; const sale = data.sales.find((row) => row.local_id === operation.entity_id); if (sale) { sale.state = "failed"; sale.last_error = message; } }
+    if (operation) { operation.attempts += 1; operation.last_error = message; const sale = data.sales.find((row) => row.local_id === operation.entity_id); if (sale) { sale.state = "failed"; sale.last_error = message; } const activity = data.activities.find((row) => row.activity_id === operationId); if (activity) { activity.status = "failed"; activity.error = message; } }
     writeWeb(data); return;
   }
   await db.run("UPDATE outbox SET attempts=attempts+1,last_error=? WHERE operation_id=?", [message, operationId]);
   await db.run("UPDATE sales SET state='failed',last_error=? WHERE local_id=(SELECT entity_id FROM outbox WHERE operation_id=?)", [message, operationId]);
+  await db.run("UPDATE sale_activity SET status='failed',error=? WHERE activity_id=?", [message, operationId]);
 }
 
 export async function offlineStats() {
@@ -511,7 +550,12 @@ export async function offlineStats() {
     id: row.server_id || row.local_id,
     sync_state: row.state,
     sync_error: row.last_error,
-  })).sort((a, b) => String(b.transaction_date || "").localeCompare(String(a.transaction_date || "")));
+  }));
+  const activities = (!db
+    ? readWeb().activities
+    : (await db.query("SELECT * FROM sale_activity ORDER BY activity_at DESC,rowid DESC LIMIT 10")).values || [])
+    .sort((left, right) => String(right.activity_at || "").localeCompare(String(left.activity_at || "")))
+    .slice(0, 10);
   const saleById = new Map(sales.map((sale) => [String(sale.client_transaction_id || sale.local_id), sale]));
   return {
     pending: operations.length,
@@ -524,11 +568,11 @@ export async function offlineStats() {
         operation_id: operation.operation_id,
         action: operation.action,
         invoice_no: sale?.invoice_no || operation.payload?.invoice_no || "-",
-        transaction_date: sale?.transaction_date || operation.created_at,
+        activity_at: operation.created_at,
         status: operation.last_error ? "failed" : "pending",
         error: operation.last_error || "",
       };
     }),
-    recent: sales.slice(0, 10),
+    recent: activities,
   };
 }

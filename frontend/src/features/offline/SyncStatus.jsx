@@ -48,7 +48,7 @@ export default function SyncStatus() {
           <div className="mt-3 space-y-2">
             {stats.queue?.length ? stats.queue.map((item) => (
               <article key={item.operation_id} className="rounded-xl border border-slate-200 p-3">
-                <div className="flex items-start justify-between gap-2"><div><p className="text-sm font-black text-slate-800">{item.invoice_no}</p><p className="text-[11px] text-slate-500">{actionLabel(item.action)} · {dateLabel(item.transaction_date)}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-black ${statusClass(item.status)}`}>{statusLabel(item.status)}</span></div>
+                <div className="flex items-start justify-between gap-2"><div><p className="text-sm font-black text-slate-800">{item.invoice_no}</p><p className="text-[11px] text-slate-500">{actionLabel(item.action)} · {dateLabel(item.activity_at)}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-black ${statusClass(item.status)}`}>{statusLabel(item.status)}</span></div>
                 {item.error && <p className="mt-2 break-words rounded-lg bg-red-50 p-2 text-[11px] text-red-700">{item.error}</p>}
               </article>
             )) : <p className="py-5 text-center text-xs text-slate-500">Tidak ada transaksi yang menunggu.</p>}
@@ -58,10 +58,10 @@ export default function SyncStatus() {
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="font-black text-slate-900">10 transaksi terakhir</h2>
           <div className="mt-3 divide-y divide-slate-100">
-            {stats.recent?.length ? stats.recent.map((sale) => (
-              <div key={sale.client_transaction_id || sale.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0"><p className="truncate text-sm font-black text-slate-800">{sale.invoice_no}</p><p className="text-[11px] text-slate-500">{dateLabel(sale.transaction_date)} · {sale.status === "void" ? "Dihapus" : sale.status === "draft" ? "Draft" : "Final"}</p></div>
-                <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${statusClass(sale.sync_state)}`}>{statusLabel(sale.sync_state)}</span>
+            {stats.recent?.length ? stats.recent.map((activity) => (
+              <div key={activity.activity_id} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0"><p className="truncate text-sm font-black text-slate-800">{activity.invoice_no}</p><p className="text-[11px] text-slate-500">{dateLabel(activity.activity_at)} · {actionLabel(activity.action)}</p></div>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${statusClass(activity.status)}`}>{statusLabel(activity.status)}</span>
               </div>
             )) : <p className="py-5 text-center text-xs text-slate-500">Belum ada transaksi lokal.</p>}
           </div>
