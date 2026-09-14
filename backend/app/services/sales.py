@@ -212,7 +212,7 @@ def create_sale(db: Session, user: User, data: SaleCreate) -> Sale:
     return get_sale(db, user.business_id, sale.id)
 
 
-def update_draft_sale(db: Session, user: User, data: SaleCreate) -> Sale:
+def update_sale(db: Session, user: User, data: SaleCreate) -> Sale:
     sale = db.execute(
         select(Sale).options(joinedload(Sale.lines), joinedload(Sale.payments)).where(
             Sale.business_id == user.business_id,
@@ -220,18 +220,123 @@ def update_draft_sale(db: Session, user: User, data: SaleCreate) -> Sale:
         )
     ).unique().scalar_one_or_none()
     if not sale:
-        raise HTTPException(404, "Draft transaksi tidak ditemukan.")
-    if sale.status != "draft":
-        raise HTTPException(409, "Transaksi final tidak dapat diedit. Gunakan void atau transaksi koreksi.")
-    # Draft belum mengubah stok. Rebuild melalui jalur create yang sama dengan
-    # client id sementara agar seluruh validasi harga/stok tetap satu tempat.
-    original_id = str(data.client_transaction_id)
-    db.delete(sale)
+        raise HTTPException(404, "Transaksi tidak ditemukan.")
+    if sale.status == "void":
+        raise HTTPException(409, "Transaksi yang sudah dihapus tidak dapat diedit.")
+
+    contact = db.scalar(select(Contact).where(Contact.id == data.contact_id, Contact.business_id == user.business_id))
+    if not contact:
+        raise HTTPException(422, "Customer tidak ditemukan.")
+
+    subtotal = Decimal("0")
+    prepared_lines = []
+    stock_enabled: dict[int, bool] = {}
+    for item in data.products:
+        variation = db.scalar(
+            select(ProductVariation)
+            .options(joinedload(ProductVariation.product))
+            .where(ProductVariation.id == item.variation_id)
+        )
+        if not variation or variation.product.business_id != user.business_id or variation.product_id != item.product_id:
+            raise HTTPException(422, f"Produk/variasi {item.variation_id} tidak ditemukan.")
+        gross = money(item.quantity * item.unit_price)
+        discount = money(gross * item.discount_amount / 100) if item.discount_type == "percentage" else money(item.discount_amount)
+        subtotal += max(Decimal("0"), gross - discount)
+        prepared_lines.append((item, variation))
+        stock_enabled[variation.id] = variation.product.enable_stock
+
+    old_quantities: dict[int, Decimal] = {}
+    if sale.status == "final":
+        for line in sale.lines:
+            old_quantities[line.variation_id] = old_quantities.get(line.variation_id, Decimal("0")) + line.quantity
+    new_quantities: dict[int, Decimal] = {}
+    if data.status == "final":
+        for item, variation in prepared_lines:
+            if variation.product.enable_stock:
+                new_quantities[variation.id] = new_quantities.get(variation.id, Decimal("0")) + item.quantity
+
+    for variation_id in set(old_quantities) | set(new_quantities):
+        if not stock_enabled.get(variation_id, True) and variation_id not in old_quantities:
+            continue
+        balance = db.scalar(
+            select(InventoryBalance)
+            .where(
+                InventoryBalance.business_id == user.business_id,
+                InventoryBalance.location_id == sale.location_id,
+                InventoryBalance.variation_id == variation_id,
+            )
+            .with_for_update()
+        )
+        if not balance:
+            raise HTTPException(409, {"code": "inventory_balance_missing", "variation_id": variation_id})
+        quantity_delta = old_quantities.get(variation_id, Decimal("0")) - new_quantities.get(variation_id, Decimal("0"))
+        if balance.quantity + quantity_delta < 0:
+            raise HTTPException(409, {"code": "insufficient_stock", "variation_id": variation_id})
+        if quantity_delta:
+            balance.quantity += quantity_delta
+            balance.revision += 1
+            db.add(StockMovement(
+                business_id=user.business_id, location_id=sale.location_id,
+                variation_id=variation_id, sale_uuid=sale.uuid,
+                quantity_delta=quantity_delta, reason="sale_edit",
+            ))
+            db.add(ChangeLog(
+                business_id=user.business_id,
+                entity_type="inventory",
+                entity_uuid=f"{balance.location_id}:{balance.variation_id}",
+                action="upsert",
+                revision=balance.revision,
+                payload={
+                    "location_id": balance.location_id,
+                    "variation_id": balance.variation_id,
+                    "quantity": str(balance.quantity),
+                    "revision": balance.revision,
+                },
+            ))
+
+    transaction_discount = money(subtotal * data.discount_amount / 100) if data.discount_type == "percentage" else money(data.discount_amount)
+    total = max(Decimal("0"), subtotal - transaction_discount + data.shipping_charges + data.packing_charge)
+    paid = sum((money(item.amount) for item in data.payments), Decimal("0"))
+
+    sale.lines.clear()
+    sale.payments.clear()
+    sale.contact_id = data.contact_id
+    sale.transaction_date = data.transaction_date
+    sale.status = data.status
+    sale.payment_status = "paid" if paid >= total else "partial" if paid > 0 else "due"
+    sale.discount_type = data.discount_type
+    sale.discount_amount = data.discount_amount
+    sale.shipping_charges = data.shipping_charges
+    sale.packing_charge = data.packing_charge
+    sale.change_return = data.change_return
+    sale.subtotal = money(subtotal)
+    sale.final_total = money(total)
+    sale.sale_note = data.sale_note
+    sale.revision += 1
+    for item, variation in prepared_lines:
+        sale.lines.append(SaleLine(
+            product_id=item.product_id, variation_id=item.variation_id,
+            product_name=variation.product.name, variation_name=variation.name,
+            quantity=item.quantity, unit_price=item.unit_price,
+            discount_type=item.discount_type, discount_amount=item.discount_amount, note=item.note,
+        ))
+    for item in data.payments:
+        sale.payments.append(Payment(
+            amount=item.amount, method=item.method, paid_on=item.paid_on or data.transaction_date,
+            account_id=item.account_id, note=item.note,
+        ))
     db.flush()
-    replacement = create_sale(db, user, data.model_copy(update={"client_transaction_id": original_id}))
-    replacement.revision = sale.revision + 1
+    db.add(ChangeLog(
+        business_id=user.business_id, entity_type="sale", entity_uuid=sale.uuid,
+        action="upsert", revision=sale.revision, payload=serialize_sale(sale, contact.name),
+    ))
     db.flush()
-    return replacement
+    return get_sale(db, user.business_id, sale.id)
+
+
+def update_draft_sale(db: Session, user: User, data: SaleCreate) -> Sale:
+    """Compatibility alias for older callers; updates now support final sales safely."""
+    return update_sale(db, user, data)
 
 
 def void_sale(db: Session, user: User, sale: Sale, reason: str) -> Sale:

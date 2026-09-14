@@ -51,7 +51,7 @@ APK Android harus menggunakan endpoint HTTPS. Login pertama dan pengisian katalo
 - Setiap transaksi mempunyai UUID perangkat dan setiap operasi mempunyai UUID unik.
 - Retry request tidak membuat transaksi ganda.
 - Transaksi disimpan lokal sebelum dikirim ke server.
-- Transaksi final tidak dapat diedit; penghapusan dilakukan sebagai void yang mengembalikan stok dan tetap menyimpan audit.
+- Transaksi draft maupun final dapat dikoreksi; perubahan stok dicatat sebagai pergerakan koreksi. Penghapusan dilakukan sebagai void yang mengembalikan stok dan tetap menyimpan audit.
 - Server memvalidasi stok. Konflik stok ditampilkan sebagai transaksi yang perlu diperiksa.
 - Cursor sinkronisasi berasal dari sequence server, bukan jam perangkat.
 - Tombol **Hapus** pada detail nota membuat void: stok dikembalikan, alasan dicatat, nomor invoice tetap terpakai, dan operasi dapat diantrekan saat offline.

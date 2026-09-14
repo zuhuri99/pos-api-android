@@ -4,6 +4,7 @@ import { logout } from "../utils/auth";
 
 const links = [
   ["/pos", "Kasir"],
+  ["/transactions", "Transaksi"],
   ["/admin/products", "Produk"],
   ["/sync", "Sinkronisasi"],
   ["/settings/printer", "Printer"],
@@ -26,7 +27,7 @@ export default function PosLayout({ title, children }) {
         <button type="button" onClick={signOut} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">Keluar</button>
       </header>
       <main className="mx-auto max-w-4xl p-3">{children}</main>
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-slate-200 bg-white px-1 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-2 shadow-2xl">
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white px-1 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-2 shadow-2xl">
         {links.map(([path, label]) => (
           <NavLink key={path} to={path} className={`rounded-lg px-1 py-2 text-center text-[11px] font-extrabold ${location.pathname === path || (path === "/pos" && location.pathname.startsWith("/pos/")) ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>{label}</NavLink>
         ))}

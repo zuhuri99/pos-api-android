@@ -125,7 +125,6 @@ export default function InvoiceDetails() {
   const autoPrintAttempted = useRef(false);
   const [thermalBusy, setThermalBusy] = useState(false);
   const [thermalStatus, setThermalStatus] = useState("");
-  const [printChoiceOpen, setPrintChoiceOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
@@ -164,9 +163,8 @@ export default function InvoiceDetails() {
     });
   };
 
-  const getThermalReceiptData = useCallback(async (includeQr = true) => {
+  const getThermalReceiptData = useCallback(async () => {
     const receipt = buildThermalReceiptData(invoice);
-    if (!includeQr) receipt.qr = "";
     const header = printRef.current?.querySelector("[data-thermal-header]");
     if (header) {
       const headerCanvas = await html2canvas(header, {
@@ -199,7 +197,7 @@ export default function InvoiceDetails() {
     setError(null);
     try {
       await posApi.remove(invoice.id, reason.trim());
-      navigate("/pos", { replace: true });
+      navigate("/transactions", { replace: true });
     } catch (deleteError) {
       const detail = deleteError.response?.data?.detail;
       setError(typeof detail === "string" ? detail : detail?.message || deleteError.message || "Transaksi gagal dihapus.");
@@ -229,12 +227,12 @@ export default function InvoiceDetails() {
     await savePdf(pdf, `Nota-${invoice.invoice_no}.pdf`, print);
   };
 
-  const handlePrint = async (includeQr = true) => {
+  const handlePrint = async () => {
     if (isNative) {
       setThermalBusy(true);
       setThermalStatus("");
       try {
-        await printThermalReceipt(await getThermalReceiptData(includeQr));
+        await printThermalReceipt(await getThermalReceiptData());
         setThermalStatus("Nota berhasil dikirim ke printer thermal.");
       } catch (printError) {
         setThermalStatus(printError.message || "Printer thermal tidak dapat dihubungi.");
@@ -350,11 +348,9 @@ export default function InvoiceDetails() {
     );
   }
 
-  const isPC = invoice.invoice_no?.toUpperCase().startsWith("PC");
   const isDraft = isDraftTransaction(invoice);
-  const headerImageUrl = isPC
-    ? import.meta.env.VITE_INVOICE_HEADER_2
-    : import.meta.env.VITE_INVOICE_HEADER_1;
+  // Dibundel bersama aplikasi agar header nota selalu tersedia saat offline.
+  const headerImageUrl = "/header-asas.jpg";
   const safeInvoiceUrl = getSafeExternalUrl(invoice.invoice_url);
 
   return (
@@ -368,7 +364,7 @@ export default function InvoiceDetails() {
             <span>←</span> Kembali
           </button>
           <div className="flex items-center gap-2">
-            {isDraft && <button
+            <button
               type="button"
               onClick={() => {
                 const source = invoice._source_user || searchParams.get("source");
@@ -377,7 +373,7 @@ export default function InvoiceDetails() {
               className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-[#0067b8] transition hover:bg-blue-100"
             >
               Edit di POS
-            </button>}
+            </button>
             <button
               type="button"
               disabled={deleteBusy}
@@ -888,10 +884,7 @@ export default function InvoiceDetails() {
                 Simpan PDF
               </button>
               <button
-                onClick={() => {
-                  if (isNative) setPrintChoiceOpen(true);
-                  else handlePrint().catch(() => {});
-                }}
+                onClick={() => handlePrint().catch(() => {})}
                 disabled={thermalBusy}
                 className="flex-1 py-2 text-xs font-semibold bg-[#0067b8] text-white hover:bg-[#005a9e] disabled:opacity-50"
               >
@@ -902,44 +895,6 @@ export default function InvoiceDetails() {
         </div>
       )}
 
-      {isNative && printChoiceOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm">
-          <section className="w-full max-w-sm rounded-[28px] border border-white/70 bg-white p-5 shadow-2xl">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-2xl text-[#0067b8]">▦</div>
-            <h3 className="text-center text-lg font-black text-slate-900">Pilih format cetak</h3>
-            <p className="mt-1 text-center text-xs leading-5 text-slate-500">QR Code hanya dihilangkan dari cetakan ini. Data invoice lainnya tetap sama.</p>
-            <div className="mt-5 grid gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintChoiceOpen(false);
-                  handlePrint(true).catch(() => {});
-                }}
-                className="rounded-2xl bg-[#0067b8] px-4 py-3 text-sm font-extrabold text-white shadow-lg shadow-blue-700/20"
-              >
-                Cetak dengan QR Code
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPrintChoiceOpen(false);
-                  handlePrint(false).catch(() => {});
-                }}
-                className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-extrabold text-slate-700"
-              >
-                Cetak tanpa QR Code
-              </button>
-              <button
-                type="button"
-                onClick={() => setPrintChoiceOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-500"
-              >
-                Batal
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
     </PosLayout>
   );
 }

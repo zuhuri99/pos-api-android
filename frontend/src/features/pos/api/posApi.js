@@ -47,6 +47,33 @@ export const posApi = {
   async incomeForYear(year) {
     return response({ pos: await listLocalSales(year) });
   },
+  async transactions({ year, search = "" } = {}) {
+    const local = await listLocalSales(year);
+    const term = search.trim().toLowerCase();
+    const filteredLocal = term
+      ? local.filter((sale) => String(sale.invoice_no || "").toLowerCase().includes(term))
+      : local;
+    if (!navigator.onLine) return response(filteredLocal, { success: true, offline: true });
+    try {
+      const remoteResponse = await incomeApi.get("/income/pos/transactions", {
+        params: { year: year || undefined, search: term || undefined, limit: 500 },
+        skipIncomeFallback: true,
+      });
+      const remote = remoteResponse.data?.data || [];
+      const localKeys = new Set(filteredLocal.flatMap((sale) => [
+        String(sale.client_transaction_id || ""),
+        String(sale.id || ""),
+      ]).filter(Boolean));
+      const merged = [
+        ...filteredLocal,
+        ...remote.filter((sale) => !localKeys.has(String(sale.client_transaction_id || "")) && !localKeys.has(String(sale.id || ""))),
+      ].sort((a, b) => String(b.transaction_date || "").localeCompare(String(a.transaction_date || "")));
+      return response(merged, { success: true });
+    } catch (error) {
+      if (filteredLocal.length) return response(filteredLocal, { success: true, offline: true });
+      throw error;
+    }
+  },
   async nextInvoice(transactionDate) {
     let number = await takeInvoiceNumber(transactionDate);
     if (!number && navigator.onLine) {
@@ -120,11 +147,17 @@ export const posApi = {
   },
   async update(id, payload) {
     const existing = await getLocalSale(String(id));
-    if (!existing) throw new Error("Edit offline hanya tersedia untuk transaksi yang tersimpan di perangkat ini.");
-    if (existing.status === "final") throw new Error("Transaksi final tidak dapat diedit. Gunakan void/koreksi transaksi.");
-    const local = await saveLocalSale({ ...existing, ...payload, products: await hydrateProducts(payload.products) }, "update", existing.client_transaction_id);
-    if (navigator.onLine) syncNow().catch(() => {});
-    return response(local, { success: true });
+    if (existing) {
+      const local = await saveLocalSale({ ...existing, ...payload, products: await hydrateProducts(payload.products) }, "update", existing.client_transaction_id);
+      if (navigator.onLine) syncNow().catch(() => {});
+      return response(local, { success: true });
+    }
+    if (!navigator.onLine) throw new Error("Transaksi ini belum tersimpan di perangkat dan hanya dapat diedit saat online.");
+    const current = await incomeApi.get(`/income/pos/transactions/${id}`, { skipIncomeFallback: true });
+    return incomeApi.put(`/income/pos/transactions/${id}`, {
+      ...current.data?.data,
+      ...payload,
+    }, { skipIncomeFallback: true });
   },
   async remove(id, reason) {
     const existing = await getLocalSale(String(id));

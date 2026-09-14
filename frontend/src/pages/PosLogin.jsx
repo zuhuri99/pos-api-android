@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import api from "../api/axios";
 import { getLoginDeviceInfo } from "../platform/deviceInfo";
 import { storeAuthSession } from "../utils/auth";
 
 export default function PosLogin() {
+  const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -26,7 +28,7 @@ export default function PosLogin() {
         device_id: device?.device_id || "android-pos",
       }, { skipAuth: true });
       await storeAuthSession(response.data);
-      window.location.replace("/pos");
+      navigate("/pos", { replace: true });
     } catch (requestError) {
       setError(requestError.response?.data?.detail || "Login gagal. Periksa akun dan koneksi.");
     } finally {

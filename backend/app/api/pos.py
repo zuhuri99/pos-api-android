@@ -9,7 +9,7 @@ from ..core.db import get_db
 from ..models import Contact, InventoryBalance, Location, Product, ProductVariation, Sale, User
 from ..schemas import InvoiceReservationRequest, SaleCreate, SaleDelete
 from ..services.invoices import reserve_invoice_numbers
-from ..services.sales import create_sale, get_sale, serialize_sale, update_draft_sale, void_sale
+from ..services.sales import create_sale, get_sale, serialize_sale, update_sale, void_sale
 from .deps import current_user
 
 router = APIRouter(prefix="/api/v1", tags=["pos"])
@@ -114,6 +114,40 @@ def create_transaction(payload: SaleCreate, user: User = Depends(current_user), 
     return {"success": True, "data": serialize_sale(sale)}
 
 
+@router.get("/income/pos/transactions")
+def transactions(
+    year: int | None = Query(default=None, ge=2020, le=9999),
+    search: str | None = Query(default=None, max_length=100),
+    limit: int = Query(default=200, ge=1, le=500),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    query = (
+        select(Sale)
+        .options(joinedload(Sale.lines), joinedload(Sale.payments))
+        .where(Sale.business_id == user.business_id, Sale.status != "void")
+    )
+    if year:
+        query = query.where(
+            Sale.transaction_date >= datetime(year, 1, 1),
+            Sale.transaction_date < datetime(year + 1, 1, 1),
+        )
+    if search and search.strip():
+        query = query.where(Sale.invoice_no.ilike(f"%{search.strip()}%"))
+    rows = db.scalars(query.order_by(Sale.transaction_date.desc()).limit(limit)).unique().all()
+    contact_ids = {row.contact_id for row in rows}
+    location_ids = {row.location_id for row in rows}
+    contact_names = dict(db.execute(select(Contact.id, Contact.name).where(Contact.id.in_(contact_ids))).all()) if contact_ids else {}
+    location_names = dict(db.execute(select(Location.id, Location.name).where(Location.id.in_(location_ids))).all()) if location_ids else {}
+    data = []
+    for row in rows:
+        item = serialize_sale(row, contact_names.get(row.contact_id))
+        item["location_name"] = location_names.get(row.location_id, "-")
+        item["_source_user"] = user.username
+        data.append(item)
+    return {"success": True, "data": data}
+
+
 @router.put("/income/pos/transactions/{sale_id}")
 def update_transaction(sale_id: int, payload: SaleCreate, user: User = Depends(current_user), db: Session = Depends(get_db)):
     current = get_sale(db, user.business_id, sale_id)
@@ -122,7 +156,7 @@ def update_transaction(sale_id: int, payload: SaleCreate, user: User = Depends(c
         "location_id": current.location_id,
         "invoice_no": current.invoice_no,
     })
-    sale = update_draft_sale(db, user, payload)
+    sale = update_sale(db, user, payload)
     db.commit()
     return {"success": True, "data": serialize_sale(sale)}
 

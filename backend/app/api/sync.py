@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..core.db import get_db
 from ..models import ChangeLog, Contact, Location, Product, ProductVariation, Sale, SyncOperation, User
 from ..schemas import SaleCreate, SaleDelete, SyncPushRequest
-from ..services.sales import create_sale, update_draft_sale, void_sale
+from ..services.sales import create_sale, update_sale, void_sale
 from .deps import current_user
 from .pos import product_payload
 
@@ -57,7 +57,7 @@ def push(payload: SyncPushRequest, user: User = Depends(current_user), db: Sessi
                 "client_transaction_id": operation.entity_id,
                 "device_id": payload.device_id,
             })
-            sale = update_draft_sale(db, user, sale_payload) if operation.action == "update" else create_sale(db, user, sale_payload)
+            sale = update_sale(db, user, sale_payload) if operation.action == "update" else create_sale(db, user, sale_payload)
         result = {
             "operation_id": operation_id, "status": "applied", "entity": "sale",
             "action": operation.action,

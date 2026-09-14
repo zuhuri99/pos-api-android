@@ -11,7 +11,6 @@ export const DEFAULT_THERMAL_SETTINGS = {
   autoOpenDrawer: false,
   drawerPin: 0,
   feedLines: 6,
-  feedLinesWithoutQr: 3,
   cutPaper: true,
 };
 

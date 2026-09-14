@@ -70,6 +70,32 @@ def test_product_sale_and_idempotent_offline_sync():
         assert stock.json()["data"][0]["stock"] == "8.0000"
 
         sale_id = first.json()["data"]["results"][0]["server_id"]
+        transaction_list = client.get(
+            "/api/v1/income/pos/transactions?year=2026&search=P1020260001",
+            headers=headers,
+        )
+        assert transaction_list.status_code == 200, transaction_list.text
+        assert [row["id"] for row in transaction_list.json()["data"]] == [sale_id]
+
+        update_payload = {
+            **body["operations"][0]["payload"],
+            "products": [{
+                **body["operations"][0]["payload"]["products"][0],
+                "quantity": "1",
+            }],
+            "payments": [{"amount": "15000", "method": "cash"}],
+        }
+        updated = client.put(
+            f"/api/v1/income/pos/transactions/{sale_id}",
+            headers=headers,
+            json=update_payload,
+        )
+        assert updated.status_code == 200, updated.text
+        assert float(updated.json()["data"]["products"][0]["quantity"]) == 1
+        assert updated.json()["data"]["revision"] == 2
+        corrected_stock = client.get("/api/v1/pos-data/product-stock-report?location_id=1", headers=headers)
+        assert corrected_stock.json()["data"][0]["stock"] == "9.0000"
+
         delete_operation_id = str(uuid4())
         delete_body = {
             "device_id": "test-device",

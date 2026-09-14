@@ -11,6 +11,7 @@ const InvoiceDetails = lazy(() => import("./pages/InvoiceDetails"));
 const ProductTransfer = lazy(() => import("./features/products/ProductTransfer"));
 const SyncStatus = lazy(() => import("./features/offline/SyncStatus"));
 const ThermalPrinterSettings = lazy(() => import("./pages/ThermalPrinterSettings"));
+const TransactionList = lazy(() => import("./features/pos/pages/TransactionList"));
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/pos" element={<ProtectedRoute><PosTransactionForm /></ProtectedRoute>} />
           <Route path="/pos/:id/edit" element={<ProtectedRoute><PosTransactionForm /></ProtectedRoute>} />
           <Route path="/invoice/:id" element={<ProtectedRoute><InvoiceDetails /></ProtectedRoute>} />
+          <Route path="/transactions" element={<ProtectedRoute><TransactionList /></ProtectedRoute>} />
           <Route path="/products/transfer" element={<ProtectedRoute><ProductTransfer /></ProtectedRoute>} />
           <Route path="/admin/products" element={<ProtectedRoute><ProductTransfer /></ProtectedRoute>} />
           <Route path="/sync" element={<ProtectedRoute><SyncStatus /></ProtectedRoute>} />

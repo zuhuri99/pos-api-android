@@ -13,6 +13,7 @@ export default function Startup() {
   const needsSetup = serverSetupEnabled && !readServerProfile() && !bundledProfile;
   const opensServerSetup = needsSetup || (serverSetupEnabled && serverRoute);
   const [status, setStatus] = useState("loading");
+  const [startupError, setStartupError] = useState("");
   useEffect(() => {
     if (opensServerSetup) return;
     let active = true;
@@ -22,12 +23,18 @@ export default function Startup() {
         await initializeAuthSession();
         await initializeSyncEngine();
         if (active) setStatus("ready");
-      } catch { if (active) setStatus("error"); }
+      } catch (error) {
+        console.error("ASAS POS startup gagal", error);
+        if (active) {
+          setStartupError(error?.message || "Kesalahan native tidak diketahui.");
+          setStatus("error");
+        }
+      }
     })();
     return () => { active = false; };
   }, [opensServerSetup]);
   if (opensServerSetup) return <PosServerSetup />;
-  if (status === "error") return <main className="p-8 text-center"><p>Sesi aplikasi gagal dimuat.</p>{serverSetupEnabled ? <a href="/server" className="text-blue-700">Buka pengaturan server</a> : <button type="button" onClick={() => window.location.reload()} className="text-blue-700">Coba lagi</button>}</main>;
+  if (status === "error") return <main className="p-8 text-center"><p className="font-bold">Sesi aplikasi gagal dimuat.</p><p className="mt-2 text-sm text-slate-500">{startupError}</p>{serverSetupEnabled ? <a href="/server" className="mt-4 inline-block text-blue-700">Buka pengaturan server</a> : <button type="button" onClick={() => window.location.reload()} className="mt-4 text-blue-700">Coba lagi</button>}</main>;
   if (status !== "ready") return <div className="min-h-[100dvh] flex items-center justify-center text-slate-600" role="status">Menghubungkan ke server…</div>;
   return <App />;
 }

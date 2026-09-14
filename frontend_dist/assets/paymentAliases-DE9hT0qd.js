@@ -1,0 +1,1 @@
+const s="finance.pos.payment-aliases.v1",o=()=>{try{const e=JSON.parse(localStorage.getItem(s)||"{}");return e&&typeof e=="object"?e:{}}catch{return{}}},c=e=>({...o()[e||"default"]||{}}),l=(e,t,a)=>{const r=c(e)[t];return r||a||String(t||"Pembayaran").replaceAll("_"," ").replace(/\b\w/g,n=>n.toUpperCase())};export{l as p};

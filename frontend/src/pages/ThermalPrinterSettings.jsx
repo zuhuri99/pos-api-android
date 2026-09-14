@@ -49,7 +49,6 @@ export default function ThermalPrinterSettings() {
         lanPort: Number(form.lanPort),
         paperWidth: Number(form.paperWidth),
         feedLines: Number(form.feedLines),
-        feedLinesWithoutQr: Number(form.feedLinesWithoutQr),
       });
       setForm((current) => ({ ...current, ...saved }));
       setMessage("Pengaturan printer berhasil disimpan.");
@@ -65,7 +64,6 @@ export default function ThermalPrinterSettings() {
         lanPort: Number(form.lanPort),
         paperWidth: Number(form.paperWidth),
         feedLines: Number(form.feedLines),
-        feedLinesWithoutQr: Number(form.feedLinesWithoutQr),
       });
       await testThermalPrinter();
       setMessage("Tes cetak berhasil dikirim ke printer.");
@@ -140,11 +138,7 @@ export default function ThermalPrinterSettings() {
             </label>
             <label className="block text-xs font-bold text-slate-600">Feed kertas setelah nota
               <input type="number" min="0" max="20" step="1" value={form.feedLines} onChange={(event) => change("feedLines", Number(event.target.value))} className={inputClass} />
-              <span className="mt-1 block font-normal leading-5 text-slate-400">Digunakan untuk nota dengan QR Code. Gunakan 6–8 jika hasil Bluetooth masih terpotong.</span>
-            </label>
-            <label className="block text-xs font-bold text-slate-600">Feed kertas untuk nota tanpa QR
-              <input type="number" min="0" max="20" step="1" value={form.feedLinesWithoutQr} onChange={(event) => change("feedLinesWithoutQr", Number(event.target.value))} className={inputClass} />
-              <span className="mt-1 block font-normal leading-5 text-slate-400">Berlaku untuk LAN dengan atau tanpa auto-cutter serta Bluetooth. Nilai awal 3 agar lebih hemat kertas.</span>
+              <span className="mt-1 block font-normal leading-5 text-slate-400">Berlaku untuk seluruh nota. Gunakan 6–8 jika hasil Bluetooth masih terpotong.</span>
             </label>
             <label className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-700">
               Potong kertas otomatis

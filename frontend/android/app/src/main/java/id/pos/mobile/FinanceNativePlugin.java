@@ -226,7 +226,6 @@ public class FinanceNativePlugin extends Plugin {
         result.put("autoOpenDrawer", prefs.getBoolean("autoOpenDrawer", false));
         result.put("drawerPin", prefs.getInt("drawerPin", 0));
         result.put("feedLines", prefs.getInt("feedLines", 6));
-        result.put("feedLinesWithoutQr", prefs.getInt("feedLinesWithoutQr", 3));
         result.put("cutPaper", prefs.getBoolean("cutPaper", true));
         return result;
     }
@@ -246,14 +245,12 @@ public class FinanceNativePlugin extends Plugin {
         String name = call.getString("bluetoothName", "").trim();
         Integer drawerPin = call.getInt("drawerPin", 0);
         Integer feedLines = call.getInt("feedLines", 6);
-        Integer feedLinesWithoutQr = call.getInt("feedLinesWithoutQr", 3);
         if (!mode.equals("lan") && !mode.equals("bluetooth")) { call.reject("Jenis printer tidak valid."); return; }
         if (mode.equals("lan") && host.isEmpty()) { call.reject("Alamat IP printer wajib diisi."); return; }
         if (port == null || port < 1 || port > 65535) { call.reject("Port printer tidak valid."); return; }
         if (width == null || (width != 58 && width != 80)) { call.reject("Lebar kertas tidak valid."); return; }
         if (drawerPin == null || (drawerPin != 0 && drawerPin != 1)) { call.reject("Pin laci tidak valid."); return; }
         if (feedLines == null || feedLines < 0 || feedLines > 20) { call.reject("Jumlah feed kertas harus 0 sampai 20."); return; }
-        if (feedLinesWithoutQr == null || feedLinesWithoutQr < 0 || feedLinesWithoutQr > 20) { call.reject("Jumlah feed tanpa QR harus 0 sampai 20."); return; }
         boolean saved = printerPreferences().edit()
             .putString("mode", mode)
             .putString("lanHost", host)
@@ -265,7 +262,6 @@ public class FinanceNativePlugin extends Plugin {
             .putBoolean("autoOpenDrawer", Boolean.TRUE.equals(call.getBoolean("autoOpenDrawer", false)))
             .putInt("drawerPin", drawerPin)
             .putInt("feedLines", feedLines)
-            .putInt("feedLinesWithoutQr", feedLinesWithoutQr)
             .putBoolean("cutPaper", Boolean.TRUE.equals(call.getBoolean("cutPaper", true)))
             .commit();
         if (saved) call.resolve(printerSettings());
@@ -327,7 +323,7 @@ public class FinanceNativePlugin extends Plugin {
             try {
                 ByteArrayOutputStream data = new ByteArrayOutputStream();
                 data.write(new byte[]{0x1b, 0x40, 0x1b, 0x61, 0x01, 0x1b, 0x45, 0x01});
-                data.write("FINANCE POS\n".getBytes(StandardCharsets.US_ASCII));
+                data.write("ASAS POS\n".getBytes(StandardCharsets.US_ASCII));
                 data.write(new byte[]{0x1b, 0x45, 0x00});
                 data.write("Tes printer berhasil\n".getBytes(StandardCharsets.US_ASCII));
                 appendFeedAndCut(data);
@@ -422,17 +418,20 @@ public class FinanceNativePlugin extends Plugin {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         output.write(new byte[]{0x1b, 0x40, 0x1b, 0x61, 0x01});
         if (printerPreferences().getBoolean("autoOpenDrawer", false)) appendDrawerPulse(output);
-        String headerImage = value(receipt, "headerImage", "");
-        if (!headerImage.isEmpty()) {
+        Bitmap header = BitmapFactory.decodeResource(getContext().getResources(), R.drawable.header_asas);
+        if (header == null) {
+            String headerImage = value(receipt, "headerImage", "");
+            if (!headerImage.isEmpty()) {
             int comma = headerImage.indexOf(',');
             if (comma >= 0) headerImage = headerImage.substring(comma + 1);
             byte[] imageBytes = Base64.decode(headerImage, Base64.DEFAULT);
-            Bitmap header = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
-            if (header != null) {
-                appendBitmapRaster(output, header, rasterWidth);
-                header.recycle();
-                writePrinterText(output, "\n");
+                header = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
             }
+        }
+        if (header != null) {
+            appendBitmapRaster(output, header, rasterWidth);
+            header.recycle();
+            writePrinterText(output, "\n");
         }
         String saleStatus = value(receipt, "saleStatus", "final");
         if (saleStatus.equalsIgnoreCase("draft")) {
@@ -526,7 +525,7 @@ public class FinanceNativePlugin extends Plugin {
             writeFooterWithoutQr(output, footer, rasterWidth, narrowPaper);
             output.write(new byte[]{0x1b, 0x45, 0x00});
         }
-        appendFeedAndCut(output, qr.isEmpty());
+        appendFeedAndCut(output);
         return output.toByteArray();
     }
 
@@ -809,13 +808,7 @@ public class FinanceNativePlugin extends Plugin {
     }
 
     private void appendFeedAndCut(ByteArrayOutputStream output) {
-        appendFeedAndCut(output, false);
-    }
-
-    private void appendFeedAndCut(ByteArrayOutputStream output, boolean withoutQr) {
-        String preferenceKey = withoutQr ? "feedLinesWithoutQr" : "feedLines";
-        int defaultLines = withoutQr ? 3 : 6;
-        int feedLines = printerPreferences().getInt(preferenceKey, defaultLines);
+        int feedLines = printerPreferences().getInt("feedLines", 6);
         if (feedLines > 0) {
             output.write(0x1b); output.write(0x64); output.write(feedLines);
         }
