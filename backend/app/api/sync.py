@@ -8,7 +8,7 @@ from ..schemas import SaleCreate, SaleDelete, SaleMark, SyncPushRequest
 from ..services.sales import create_sale, mark_sale, serialize_sale, update_sale, void_sale
 from ..services.notifications import queue_transaction_notifications
 from .deps import authorize_sale_delete, current_user
-from .pos import product_payload
+from .pos import contact_payload, product_payload
 
 router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
 
@@ -25,7 +25,7 @@ def sync_bootstrap(user: User = Depends(current_user), db: Session = Depends(get
     return {"data": {
         "cursor": cursor,
         "products": [product_payload(row, None) for row in products],
-        "contacts": [{"id": row.id, "uuid": row.uuid, "name": row.name, "mobile": row.mobile, "revision": row.revision} for row in contacts],
+        "contacts": [contact_payload(row) for row in contacts],
         "locations": [{"id": row.id, "uuid": row.uuid, "name": row.name, "revision": row.revision} for row in locations],
     }}
 

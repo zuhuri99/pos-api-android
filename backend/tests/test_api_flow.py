@@ -58,9 +58,31 @@ def test_cashier_logout_requires_pin_and_revokes_token():
         assert client.get("/api/v1/auth/token/verify/", headers=headers).status_code == 401
 
 
+def test_web_login_can_be_disabled_but_android_remains_available(monkeypatch):
+    from app.api import auth
+
+    monkeypatch.setattr(auth.get_settings(), "web_frontend_enabled", False)
+    with TestClient(app) as client:
+        web = client.post("/api/v1/auth/login/", json={
+            "username": "admin", "password": "test-password", "device_type": "web",
+        })
+        android = client.post("/api/v1/auth/login/", json={
+            "username": "admin", "password": "test-password", "device_type": "android",
+        })
+    assert web.status_code == 403
+    assert android.status_code == 200
+
+
 def test_product_sale_and_idempotent_offline_sync():
     with TestClient(app) as client:
         headers = auth_headers(client)
+        created_contact = client.post("/api/v1/income/pos/contacts", headers=headers, json={
+            "name": "Pelanggan Baru", "mobile": "08123456789",
+        })
+        assert created_contact.status_code == 201, created_contact.text
+        assert created_contact.json()["data"]["name"] == "Pelanggan Baru"
+        contacts = client.get("/api/v1/income/pos/contacts", headers=headers)
+        assert any(row["id"] == created_contact.json()["data"]["id"] for row in contacts.json()["data"])
         imported = client.post("/api/v1/products/import/commit", headers=headers, json={
             "location_id": 1,
             "rows": [{

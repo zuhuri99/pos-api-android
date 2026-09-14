@@ -74,8 +74,17 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="ASAS POS API", version="0.1.0", lifespan=lifespan)
+def documentation_urls(app_settings):
+    if app_settings.is_production:
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
 settings = get_settings()
+app = FastAPI(
+    title="ASAS POS API", version="0.1.0", lifespan=lifespan,
+    **documentation_urls(settings),
+)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(
     CORSMiddleware,
@@ -107,6 +116,8 @@ FRONTEND_DIR = Path(os.getenv("FRONTEND_DIR", "/app/frontend_dist")).resolve()
 @app.get("/{full_path:path}", include_in_schema=False)
 def frontend_app(full_path: str):
     """Layani build React dan fallback BrowserRouter tanpa menutupi 404 API."""
+    if not settings.web_frontend_enabled:
+        raise HTTPException(404, "Frontend web dinonaktifkan.")
     if full_path.startswith(("api/", "docs", "redoc", "openapi.json")):
         raise HTTPException(404, "Endpoint tidak ditemukan.")
     candidate = (FRONTEND_DIR / full_path).resolve()

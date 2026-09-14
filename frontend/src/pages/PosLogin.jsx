@@ -26,6 +26,7 @@ export default function PosLogin() {
         username,
         password,
         device_id: device?.device_id || "android-pos",
+        device_type: device?.device_type || "web",
       }, { skipAuth: true });
       await storeAuthSession(response.data);
       navigate("/pos", { replace: true });

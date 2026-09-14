@@ -91,6 +91,10 @@ export default function PosTransactionForm() {
   const [generatingInvoice, setGeneratingInvoice] = useState(!isEdit);
   const [saving, setSaving] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [customerForm, setCustomerForm] = useState({ name: "", mobile: "" });
+  const [customerBusy, setCustomerBusy] = useState(false);
+  const [customerError, setCustomerError] = useState("");
   const [error, setError] = useState("");
   const [showMore, setShowMore] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -291,6 +295,34 @@ export default function PosTransactionForm() {
       setError(getPosApiError(requestError, "Data POS gagal diperbarui."));
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const saveCustomer = async (event) => {
+    event.preventDefault();
+    const name = customerForm.name.trim();
+    if (name.length < 2) {
+      setCustomerError("Nama customer wajib diisi minimal 2 karakter.");
+      return;
+    }
+    setCustomerBusy(true);
+    setCustomerError("");
+    try {
+      const response = await posApi.createContact({
+        name,
+        mobile: customerForm.mobile.trim() || null,
+      });
+      const customer = response.data?.data;
+      if (!customer) throw new Error("Data customer baru tidak diterima.");
+      setContacts((current) => [...current.filter((item) => Number(item.id) !== Number(customer.id)), customer]
+        .sort((left, right) => contactLabel(left).localeCompare(contactLabel(right), "id-ID")));
+      setForm((current) => ({ ...current, contact_id: String(customer.id) }));
+      setCustomerForm({ name: "", mobile: "" });
+      setCustomerOpen(false);
+    } catch (requestError) {
+      setCustomerError(getPosApiError(requestError, "Customer gagal ditambahkan."));
+    } finally {
+      setCustomerBusy(false);
     }
   };
 
@@ -639,13 +671,13 @@ export default function PosTransactionForm() {
                     {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
                   </select>
                 </label>
-                <label className="min-w-0 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                  Customer
-                  <select value={form.contact_id} onChange={(event) => setForm((current) => ({ ...current, contact_id: event.target.value }))} className="mt-1 h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold">
+                <div className="min-w-0 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  <div className="flex items-center justify-between gap-2"><span>Customer</span><button type="button" onClick={() => { setCustomerError(""); setCustomerOpen(true); }} className="text-[10px] font-extrabold normal-case tracking-normal text-blue-700">+ Tambah customer</button></div>
+                  <select aria-label="Customer" value={form.contact_id} onChange={(event) => setForm((current) => ({ ...current, contact_id: event.target.value }))} className="mt-1 h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold">
                     <option value="">Pilih customer</option>
                     {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contactLabel(contact)}</option>)}
                   </select>
-                </label>
+                </div>
                 <label className="col-span-2 min-w-0 text-[10px] font-bold uppercase tracking-wide text-slate-500 sm:col-span-1">
                   Nomor invoice
                   <div className="relative mt-1">
@@ -839,6 +871,28 @@ export default function PosTransactionForm() {
               <button type="button" onClick={() => setPaymentOpen(false)} className="w-full rounded-2xl bg-[#0067b8] px-4 py-3 text-sm font-extrabold text-white">Selesai</button>
             </footer>
           </section>
+        </div>
+      )}
+
+      {customerOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !customerBusy) setCustomerOpen(false); }}>
+          <form onSubmit={saveCustomer} className="w-full max-w-sm rounded-[28px] bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-blue-600">Customer POS</p><h2 className="mt-1 text-xl font-black text-slate-900">Tambah customer</h2></div>
+              <button type="button" disabled={customerBusy} onClick={() => setCustomerOpen(false)} className="h-9 w-9 rounded-full bg-slate-100 text-xl font-bold text-slate-500 disabled:opacity-50">×</button>
+            </div>
+            <label className="mt-5 block text-xs font-extrabold text-slate-600">Nama customer
+              <input autoFocus required minLength="2" maxLength="160" value={customerForm.name} onChange={(event) => setCustomerForm((current) => ({ ...current, name: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-blue-500" placeholder="Nama customer" />
+            </label>
+            <label className="mt-3 block text-xs font-extrabold text-slate-600">Nomor telepon <span className="font-normal text-slate-400">(opsional)</span>
+              <input type="tel" maxLength="40" value={customerForm.mobile} onChange={(event) => setCustomerForm((current) => ({ ...current, mobile: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-blue-500" placeholder="08xxxxxxxxxx" />
+            </label>
+            {customerError && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{customerError}</p>}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" disabled={customerBusy} onClick={() => setCustomerOpen(false)} className="rounded-xl border border-slate-300 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50">Batal</button>
+              <button disabled={customerBusy} className="rounded-xl bg-blue-700 py-2.5 text-sm font-extrabold text-white disabled:opacity-50">{customerBusy ? "Menyimpan…" : "Simpan customer"}</button>
+            </div>
+          </form>
         </div>
       )}
 

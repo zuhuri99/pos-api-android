@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", enable_decoding=False)
 
     app_env: str = "development"
+    web_frontend_enabled: bool = True
     database_url: str = "postgresql+psycopg://pos:pos@localhost:5432/pos"
     app_secret: str = "development-only-change-this-secret"
     admin_username: str = Field(min_length=1, max_length=80)
@@ -26,6 +27,10 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=3, ge=0, le=20)
     api_max_concurrency: int = Field(default=50, ge=10, le=1000)
     api_thread_limit: int = Field(default=10, ge=4, le=40)
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() == "production"
 
     @field_validator("database_url", mode="before")
     @classmethod

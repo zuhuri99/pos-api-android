@@ -138,6 +138,26 @@ export async function upsertProduct(product) {
   await db.run("INSERT OR REPLACE INTO products(id,sku,name,payload) VALUES (?,?,?,?)", [product.id, product.sku || "", product.name || "", JSON.stringify(product)]);
 }
 
+export async function upsertContact(contact) {
+  const active = contact?.is_active === undefined || Number(contact.is_active) === 1;
+  const db = await nativeDb();
+  if (!db) {
+    const data = readWeb();
+    data.contacts = data.contacts.filter((row) => Number(row.id) !== Number(contact.id));
+    if (active) data.contacts.push(contact);
+    writeWeb(data);
+    return;
+  }
+  if (!active) {
+    await db.run("DELETE FROM contacts WHERE id=?", [contact.id]);
+    return;
+  }
+  await db.run(
+    "INSERT OR REPLACE INTO contacts(id,name,payload) VALUES (?,?,?)",
+    [contact.id, contact.name || "", JSON.stringify(contact)],
+  );
+}
+
 function updateInventoryPayload(product, change) {
   return {
     ...product,

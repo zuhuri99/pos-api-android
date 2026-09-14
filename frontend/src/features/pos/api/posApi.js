@@ -14,6 +14,7 @@ import {
   saveLocalSale,
   searchLocalProducts,
   peekInvoiceNumber,
+  upsertContact,
 } from "../../offline/localStore";
 import { replenishInvoices, syncNow } from "../../offline/syncEngine";
 
@@ -95,6 +96,13 @@ export const posApi = {
   },
   async contacts() {
     return response(await getLocalContacts());
+  },
+  async createContact(payload) {
+    if (!navigator.onLine) throw new Error("Perangkat harus online untuk menambah customer.");
+    const created = await incomeApi.post("/income/pos/contacts", payload, { skipIncomeFallback: true });
+    const contact = created.data?.data;
+    if (contact) await upsertContact(contact);
+    return created;
   },
   qrisUrl(payload) {
     if (!navigator.onLine) return Promise.reject(new Error("QRIS hanya tersedia saat online."));

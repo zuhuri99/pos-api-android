@@ -14,6 +14,7 @@ import {
   setMeta,
   applyInventoryChange,
   applyRemoteSaleDelete,
+  upsertContact,
   upsertProduct,
 } from "./localStore";
 
@@ -77,6 +78,7 @@ export async function syncNow() {
       const data = response.data?.data || {};
       for (const change of data.changes || []) {
         if (change.entity === "product" && change.action === "upsert") await upsertProduct(change.data);
+        if (change.entity === "contact" && change.action === "upsert") await upsertContact(change.data);
         if (change.entity === "inventory" && change.action === "upsert") await applyInventoryChange(change.data);
         if (change.entity === "sale" && change.action === "delete") await applyRemoteSaleDelete(change.data);
       }

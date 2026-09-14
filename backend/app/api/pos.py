@@ -6,14 +6,25 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..core.db import get_db
-from ..models import Contact, InventoryBalance, Location, Product, ProductVariation, Sale, User
-from ..schemas import InvoiceReservationRequest, SaleCreate, SaleDelete, SaleMark
+from ..models import ChangeLog, Contact, InventoryBalance, Location, Product, ProductVariation, Sale, User
+from ..schemas import ContactCreate, InvoiceReservationRequest, SaleCreate, SaleDelete, SaleMark
 from ..services.invoices import reserve_invoice_numbers
 from ..services.notifications import queue_transaction_notification
 from ..services.sales import create_sale, get_sale, mark_sale, serialize_sale, update_sale, void_sale
 from .deps import authorize_sale_delete, current_user
 
 router = APIRouter(prefix="/api/v1", tags=["pos"])
+
+
+def contact_payload(contact: Contact) -> dict:
+    return {
+        "id": contact.id,
+        "uuid": contact.uuid,
+        "name": contact.name,
+        "mobile": contact.mobile,
+        "is_active": 1 if contact.is_active else 0,
+        "revision": contact.revision,
+    }
 
 
 def product_payload(product: Product, location_id: int | None) -> dict:
@@ -79,7 +90,34 @@ def contacts(
     user: User = Depends(current_user), db: Session = Depends(get_db),
 ):
     rows = db.scalars(select(Contact).where(Contact.business_id == user.business_id, Contact.is_active.is_(True)).limit(per_page)).all()
-    return {"data": [{"id": row.id, "uuid": row.uuid, "name": row.name, "mobile": row.mobile, "revision": row.revision} for row in rows]}
+    return {"data": [contact_payload(row) for row in rows]}
+
+
+@router.post("/income/pos/contacts", status_code=201)
+def create_contact(
+    payload: ContactCreate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    contact = Contact(
+        business_id=user.business_id,
+        name=payload.name,
+        mobile=payload.mobile,
+        is_active=True,
+    )
+    db.add(contact)
+    db.flush()
+    data = contact_payload(contact)
+    db.add(ChangeLog(
+        business_id=user.business_id,
+        entity_type="contact",
+        entity_uuid=contact.uuid,
+        action="upsert",
+        revision=contact.revision,
+        payload=data,
+    ))
+    db.commit()
+    return {"success": True, "data": data}
 
 
 @router.get("/pos-data/product-stock-report")

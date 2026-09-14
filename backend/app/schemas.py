@@ -22,6 +22,7 @@ class LoginRequest(BaseModel):
     username: str
     password: str
     device_id: str | None = None
+    device_type: Literal["web", "android"] = "web"
 
 
 class LogoutRequest(BaseModel):
@@ -95,6 +96,19 @@ class SaleMark(BaseModel):
         if self.mark_type == "other" and len(reason) < 3:
             raise ValueError("Alasan lainnya wajib diisi minimal 3 karakter.")
         self.reason = "Transaksi salah" if self.mark_type == "wrong" else reason
+        return self
+
+
+class ContactCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    mobile: str | None = Field(default=None, max_length=40)
+
+    @model_validator(mode="after")
+    def clean_values(self):
+        self.name = self.name.strip()
+        if len(self.name) < 2:
+            raise ValueError("Nama customer wajib diisi minimal 2 karakter.")
+        self.mobile = (self.mobile or "").strip() or None
         return self
 
 
