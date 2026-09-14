@@ -18,6 +18,7 @@ export default function ProductList() {
   const [locations, setLocations] = useState([]);
   const [locationId, setLocationId] = useState("");
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
@@ -59,9 +60,17 @@ export default function ProductList() {
         .reduce((sum, item) => sum + Number(item.qty_available || 0), 0);
       return { product, variation, stock };
     }))), [locationId, products]);
-  const filtered = rows.filter(({ product, variation }) =>
-    [product.name, product.sku, variation.name, variation.sub_sku]
-      .join(" ").toLowerCase().includes(query.trim().toLowerCase()));
+  const categories = useMemo(() => [...new Set(products
+    .map((product) => String(product.category || "").trim())
+    .filter(Boolean))].sort((left, right) => left.localeCompare(right, "id-ID")), [products]);
+  const filtered = rows.filter(({ product, variation }) => {
+    const matchesQuery = [product.name, product.sku, variation.name, variation.sub_sku]
+      .join(" ").toLowerCase().includes(query.trim().toLowerCase());
+    const productCategory = String(product.category || "").trim();
+    const matchesCategory = !category
+      || (category === "__uncategorized__" ? !productCategory : productCategory === category);
+    return matchesQuery && matchesCategory;
+  });
   const totalPages = pageSize === "all" ? 1 : Math.max(1, Math.ceil(filtered.length / Number(pageSize)));
   const currentPage = Math.min(page, totalPages);
   const visible = pageSize === "all"
@@ -80,7 +89,7 @@ export default function ProductList() {
             </div>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <div className="flex gap-2">
+            <div className="flex gap-2 sm:col-span-2">
               <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Cari nama atau SKU…" className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400" />
               <button type="button" onClick={scanProduct} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md" aria-label="Pindai QR produk" title="Pindai QR produk">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm11 0h2v2h-2v-2Zm3 0h2v3h-2v-3Zm-3 4h3v2h-3v-2Z" /></svg>
@@ -89,6 +98,11 @@ export default function ProductList() {
             <select value={locationId} onChange={(event) => { setLocationId(event.target.value); setPage(1); }} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold">
               {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
             </select>
+            <select aria-label="Filter kategori" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold">
+              <option value="">Semua kategori</option>
+              {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+              <option value="__uncategorized__">Tanpa kategori</option>
+            </select>
           </div>
           {error && <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
         </section>
@@ -96,7 +110,7 @@ export default function ProductList() {
         <section className="grid gap-3 sm:grid-cols-2">
           {visible.map(({ product, variation, stock }) => (
             <article key={variation.id} className="rounded-[22px] border border-white/80 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate font-black text-slate-900">{product.name}</h2><p className="mt-0.5 truncate text-xs text-slate-500">SKU: {variation.sub_sku || product.sku || "-"}{variation.name && variation.name !== "DUMMY" ? ` · ${variation.name}` : ""}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-black ${product.is_inactive ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>{product.is_inactive ? "Nonaktif" : "Aktif"}</span></div>
+              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate font-black text-slate-900">{product.name}</h2><p className="mt-0.5 truncate text-xs text-slate-500">SKU: {variation.sub_sku || product.sku || "-"}{variation.name && variation.name !== "DUMMY" ? ` · ${variation.name}` : ""}</p><span className="mt-2 inline-flex max-w-full items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-extrabold text-violet-700"><span aria-hidden="true">◆</span><span className="truncate">{product.category || "Tanpa kategori"}</span></span></div><span className={`rounded-full px-2 py-1 text-[10px] font-black ${product.is_inactive ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>{product.is_inactive ? "Nonaktif" : "Aktif"}</span></div>
               <div className="mt-4 flex items-end justify-between border-t border-dashed border-slate-200 pt-3"><div><p className="text-[10px] font-bold uppercase text-slate-400">Stok</p><p className="text-xl font-black text-slate-800">{Number(product.enable_stock) === 1 ? stock : "∞"}</p></div><p className="font-black text-blue-700">{rupiah(variation.sell_price_inc_tax || variation.default_sell_price)}</p></div>
             </article>
           ))}
