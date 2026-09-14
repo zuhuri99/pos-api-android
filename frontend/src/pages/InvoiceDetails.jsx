@@ -9,12 +9,14 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { posApi } from "../features/pos/api/posApi";
 import PosLayout from "../layouts/PosLayout";
+import TransactionDeleteDialog from "../features/pos/components/TransactionDeleteDialog";
 import { paymentAliasLabel } from "../features/pos/paymentAliases";
 import { isDraftTransaction } from "../features/pos/transactionStatus";
 import { getPaymentStatusText } from "../utils/paymentStatus";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { QRCodeSVG } from "qrcode.react";
+import { getActiveAccount } from "../utils/auth";
 
 const formatRupiah = (angka) => {
   return new Intl.NumberFormat("id-ID", {
@@ -129,6 +131,9 @@ export default function InvoiceDetails() {
   const [printerChoiceOpen, setPrinterChoiceOpen] = useState(false);
   const [printerSettings, setPrinterSettings] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const requiresDeletePin = !getActiveAccount()?.user?.is_superuser;
 
   useEffect(() => {
     const fetchInvoice = async () => {
@@ -188,22 +193,15 @@ export default function InvoiceDetails() {
     if (blob) await saveBlob(blob, `Nota-${invoice.invoice_no}.png`);
   };
 
-  const handleDelete = async () => {
-    const reason = window.prompt("Alasan penghapusan transaksi:", "Transaksi salah");
-    if (reason === null) return;
-    if (reason.trim().length < 3) {
-      setError("Alasan penghapusan minimal 3 karakter.");
-      return;
-    }
-    if (!window.confirm(`Hapus transaksi ${invoice.invoice_no}? Stok akan dikembalikan dan nomor invoice tidak dapat dipakai ulang.`)) return;
+  const handleDelete = async ({ reason, pin }) => {
     setDeleteBusy(true);
-    setError(null);
+    setDeleteError("");
     try {
-      await posApi.remove(invoice.id, reason.trim());
+      await posApi.remove(invoice.id, reason, pin);
       navigate("/transactions", { replace: true });
     } catch (deleteError) {
       const detail = deleteError.response?.data?.detail;
-      setError(typeof detail === "string" ? detail : detail?.message || deleteError.message || "Transaksi gagal dihapus.");
+      setDeleteError(typeof detail === "string" ? detail : detail?.message || deleteError.message || "Transaksi gagal dihapus.");
     } finally {
       setDeleteBusy(false);
     }
@@ -399,7 +397,7 @@ export default function InvoiceDetails() {
             <button
               type="button"
               disabled={deleteBusy}
-              onClick={handleDelete}
+              onClick={() => { setDeleteError(""); setDeleteOpen(true); }}
               className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
             >
               {deleteBusy ? "Menghapus…" : "Hapus"}
@@ -929,6 +927,8 @@ export default function InvoiceDetails() {
           </section>
         </div>
       )}
+
+      {deleteOpen && <TransactionDeleteDialog sale={invoice} requiresPin={requiresDeletePin} busy={deleteBusy} error={deleteError} onClose={() => { if (!deleteBusy) setDeleteOpen(false); }} onConfirm={handleDelete} />}
 
     </PosLayout>
   );

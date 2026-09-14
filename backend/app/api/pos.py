@@ -10,7 +10,7 @@ from ..models import Contact, InventoryBalance, Location, Product, ProductVariat
 from ..schemas import InvoiceReservationRequest, SaleCreate, SaleDelete
 from ..services.invoices import reserve_invoice_numbers
 from ..services.sales import create_sale, get_sale, serialize_sale, update_sale, void_sale
-from .deps import current_user
+from .deps import authorize_sale_delete, current_user
 
 router = APIRouter(prefix="/api/v1", tags=["pos"])
 
@@ -184,8 +184,10 @@ def delete_transaction(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    delete_payload = payload or SaleDelete()
+    authorize_sale_delete(user, delete_payload.pin)
     sale = get_sale(db, user.business_id, sale_id)
-    sale = void_sale(db, user, sale, (payload or SaleDelete()).reason)
+    sale = void_sale(db, user, sale, delete_payload.reason)
     db.commit()
     return {"success": True, "data": serialize_sale(sale)}
 

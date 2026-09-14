@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
+import secrets
 
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.db import get_db
+from ..core.config import get_settings
 from ..core.security import token_digest
 from ..models import AccessToken, User
 
@@ -31,3 +33,13 @@ def current_admin(user: User = Depends(current_user)) -> User:
     if not user.is_admin:
         raise HTTPException(403, "Akses administrator diperlukan.")
     return user
+
+
+def authorize_sale_delete(user: User, pin: str | None) -> None:
+    if user.is_admin:
+        return
+    expected = get_settings().user_delete_pin
+    if not pin:
+        raise HTTPException(403, "PIN otorisasi diperlukan untuk menghapus transaksi.")
+    if not secrets.compare_digest(pin, expected):
+        raise HTTPException(403, "PIN otorisasi tidak valid.")

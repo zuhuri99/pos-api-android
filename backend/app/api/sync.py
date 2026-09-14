@@ -6,7 +6,7 @@ from ..core.db import get_db
 from ..models import ChangeLog, Contact, Location, Product, ProductVariation, Sale, SyncOperation, User
 from ..schemas import SaleCreate, SaleDelete, SyncPushRequest
 from ..services.sales import create_sale, update_sale, void_sale
-from .deps import current_user
+from .deps import authorize_sale_delete, current_user
 from .pos import product_payload
 
 router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
@@ -42,6 +42,7 @@ def push(payload: SyncPushRequest, user: User = Depends(current_user), db: Sessi
             delete_payload = operation.payload
             if not isinstance(delete_payload, SaleDelete):
                 raise ValueError("Payload penghapusan transaksi tidak valid.")
+            authorize_sale_delete(user, delete_payload.pin)
             sale = db.scalar(select(Sale).where(
                 Sale.business_id == user.business_id,
                 Sale.client_transaction_id == str(operation.entity_id),

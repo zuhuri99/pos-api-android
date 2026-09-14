@@ -1,10 +1,12 @@
 import incomeApi from "../../../api/incomeAxios";
 import { getLoginDeviceInfo } from "../../../platform/deviceInfo";
+import { getActiveAccount } from "../../../utils/auth";
 import {
   getCatalogBootstrap,
   getLocalContacts,
   getLocalSale,
   getLocalStock,
+  applyRemoteSaleDelete,
   listLocalSales,
   queueLocalSaleDelete,
   saveLocalSale,
@@ -159,8 +161,24 @@ export const posApi = {
       ...payload,
     }, { skipIncomeFallback: true });
   },
-  async remove(id, reason) {
+  async remove(id, reason, pin) {
     const existing = await getLocalSale(String(id));
+    const isAdmin = Boolean(getActiveAccount()?.user?.is_superuser);
+    if (!isAdmin) {
+      if (!navigator.onLine) throw new Error("Akun kasir harus online untuk memverifikasi PIN penghapusan.");
+      await syncNow();
+      const synchronized = await getLocalSale(String(id));
+      const serverId = synchronized?.id || existing?.id || id;
+      if (!/^\d+$/.test(String(serverId))) {
+        throw new Error("Transaksi belum berhasil disinkronkan. Coba sinkronkan sebelum menghapus.");
+      }
+      const removed = await incomeApi.delete(`/income/pos/transactions/${serverId}`, {
+        data: { reason, pin },
+        skipIncomeFallback: true,
+      });
+      await applyRemoteSaleDelete(removed.data?.data || { id: serverId });
+      return removed;
+    }
     if (existing) {
       const local = await queueLocalSaleDelete(String(id), reason);
       if (navigator.onLine) syncNow().catch(() => {});

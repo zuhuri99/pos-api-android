@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import PosLayout from "../../../layouts/PosLayout";
+import TransactionDeleteDialog from "../components/TransactionDeleteDialog";
 import { posApi } from "../api/posApi";
 import { getPosApiError } from "../posUtils";
+import { getActiveAccount } from "../../../utils/auth";
 
 const rupiah = (value) => new Intl.NumberFormat("id-ID", {
   style: "currency",
@@ -43,6 +45,8 @@ export default function TransactionList() {
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const requiresDeletePin = !getActiveAccount()?.user?.is_superuser;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,19 +67,15 @@ export default function TransactionList() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const remove = async (sale) => {
-    const reason = window.prompt(`Alasan menghapus ${sale.invoice_no}:`, "Transaksi salah");
-    if (reason === null) return;
-    if (reason.trim().length < 3) {
-      setError("Alasan penghapusan minimal 3 karakter.");
-      return;
-    }
-    if (!window.confirm(`Hapus transaksi ${sale.invoice_no}? Stok akan dikembalikan.`)) return;
+  const remove = async ({ reason, pin }) => {
+    const sale = deleteTarget;
+    if (!sale) return;
     setDeleting(String(sale.id));
     setError("");
     try {
-      await posApi.remove(sale.id, reason.trim());
+      await posApi.remove(sale.id, reason, pin);
       setSales((current) => current.filter((row) => String(row.id) !== String(sale.id)));
+      setDeleteTarget(null);
     } catch (requestError) {
       setError(getPosApiError(requestError, "Transaksi gagal dihapus."));
     } finally {
@@ -127,13 +127,14 @@ export default function TransactionList() {
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   <button type="button" onClick={() => navigate(`/invoice/${sale.id}`)} className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2.5 text-xs font-extrabold text-slate-700">Lihat</button>
                   <button type="button" onClick={() => navigate(`/pos/${sale.id}/edit`)} className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2.5 text-xs font-extrabold text-blue-700">Edit</button>
-                  <button type="button" disabled={deleting === String(sale.id)} onClick={() => remove(sale)} className="rounded-xl border border-red-200 bg-red-50 px-2 py-2.5 text-xs font-extrabold text-red-700 disabled:opacity-50">{deleting === String(sale.id) ? "…" : "Hapus"}</button>
+                  <button type="button" disabled={deleting === String(sale.id)} onClick={() => { setError(""); setDeleteTarget(sale); }} className="rounded-xl border border-red-200 bg-red-50 px-2 py-2.5 text-xs font-extrabold text-red-700 disabled:opacity-50">{deleting === String(sale.id) ? "…" : "Hapus"}</button>
                 </div>
               </article>
             ))}
           </div>
         )}
       </div>
+      {deleteTarget && <TransactionDeleteDialog sale={deleteTarget} requiresPin={requiresDeletePin} busy={Boolean(deleting)} error={error} onClose={() => { if (!deleting) setDeleteTarget(null); }} onConfirm={remove} />}
     </PosLayout>
   );
 }

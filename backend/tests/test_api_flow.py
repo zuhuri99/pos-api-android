@@ -13,6 +13,39 @@ def auth_headers(client: TestClient) -> dict[str, str]:
     return {"Authorization": f"Token {response.json()['token']}"}
 
 
+def user_headers(client: TestClient) -> dict[str, str]:
+    response = client.post("/api/v1/auth/login/", json={
+        "username": "kasir", "password": "cashier-password", "device_id": "cashier-device",
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["user"]["is_superuser"] is False
+    return {"Authorization": f"Token {response.json()['token']}"}
+
+
+def test_cashier_delete_requires_valid_pin():
+    with TestClient(app) as client:
+        headers = user_headers(client)
+        missing = client.request(
+            "DELETE", "/api/v1/income/pos/transactions/999999",
+            headers=headers, json={"reason": "Salah input barang"},
+        )
+        assert missing.status_code == 403
+        assert "PIN" in missing.json()["detail"]
+
+        invalid = client.request(
+            "DELETE", "/api/v1/income/pos/transactions/999999",
+            headers=headers, json={"reason": "Salah input barang", "pin": "000000"},
+        )
+        assert invalid.status_code == 403
+        assert "tidak valid" in invalid.json()["detail"]
+
+        authorized = client.request(
+            "DELETE", "/api/v1/income/pos/transactions/999999",
+            headers=headers, json={"reason": "Salah input barang", "pin": "654321"},
+        )
+        assert authorized.status_code == 404
+
+
 def test_product_sale_and_idempotent_offline_sync():
     with TestClient(app) as client:
         headers = auth_headers(client)

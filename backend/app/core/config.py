@@ -10,9 +10,13 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "postgresql+psycopg://pos:pos@localhost:5432/pos"
     app_secret: str = "development-only-change-this-secret"
-    bootstrap_username: str = "admin"
-    bootstrap_password: str = "change-me-now"
-    token_ttl_days: int = 30
+    admin_username: str = Field(min_length=1, max_length=80)
+    admin_password: str = Field(min_length=8, max_length=256)
+    admin_token_ttl_days: int = Field(default=3650, ge=1, le=36500)
+    user_username: str = Field(min_length=1, max_length=80)
+    user_password: str = Field(min_length=8, max_length=256)
+    user_token_ttl_days: int = Field(default=3650, ge=1, le=36500)
+    user_delete_pin: str = Field(min_length=4, max_length=64)
     cors_origins: list[str] = ["https://pos.local"]
     allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver"]
     db_pool_size: int = Field(default=5, ge=1, le=20)

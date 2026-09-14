@@ -56,6 +56,7 @@ class SaleCreate(BaseModel):
 
 class SaleDelete(BaseModel):
     reason: str = Field(default="Transaksi salah", min_length=3, max_length=500)
+    pin: str | None = Field(default=None, min_length=4, max_length=64, exclude=True)
 
 
 class SyncOperationIn(BaseModel):
