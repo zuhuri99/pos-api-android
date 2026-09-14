@@ -133,7 +133,8 @@ export default function InvoiceDetails() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const requiresDeletePin = !getActiveAccount()?.user?.is_superuser;
+  const isAdmin = Boolean(getActiveAccount()?.user?.is_superuser);
+  const requiresDeletePin = !isAdmin;
 
   useEffect(() => {
     const fetchInvoice = async () => {
@@ -891,18 +892,18 @@ export default function InvoiceDetails() {
               {isNative && thermalStatus && (
                 <p className={`w-full text-center text-xs font-semibold ${thermalStatus.toLowerCase().includes("gagal") || thermalStatus.toLowerCase().includes("tidak") ? "text-red-700" : "text-emerald-700"}`}>{thermalStatus}</p>
               )}
-              <button
+              {isAdmin && <button
                 onClick={() => handleDownloadImage().catch((err) => setError(err.message || "Dokumen gagal diproses."))}
                 className="flex-1 py-2 text-xs font-semibold bg-green-100 text-green-700 border border-green-300 hover:bg-green-200"
               >
                 Simpan Gambar
-              </button>
-              <button
+              </button>}
+              {isAdmin && <button
                 onClick={() => handleDownloadPDF().catch((err) => setError(err.message || "Dokumen gagal diproses."))}
                 className="flex-1 py-2 text-xs font-semibold bg-red-100 text-red-700 border border-red-300 hover:bg-red-200"
               >
                 Simpan PDF
-              </button>
+              </button>}
               <button
                 onClick={() => requestPrint().catch(() => {})}
                 disabled={thermalBusy}
