@@ -476,16 +476,6 @@ export default function InvoiceDetails() {
           </div>
         </div>
 
-        {/* CATATAN PENJUALAN */}
-        <div className="mt-4 border-y border-amber-200 bg-amber-50 px-4 py-3 shadow-sm">
-          <span className="block text-[10px] font-bold uppercase tracking-wide text-amber-800">
-            Catatan Penjualan
-          </span>
-          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-800">
-            {getSaleNote(invoice) || "-"}
-          </p>
-        </div>
-
         {/* RINCIAN PRODUK */}
         <div className="bg-white mt-4 border-y border-gray-200 shadow-sm">
           <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
@@ -585,6 +575,15 @@ export default function InvoiceDetails() {
             <div className="flex justify-between items-center text-lg font-bold text-[#0067b8]">
               <span>Total</span>
               <span>Rp {formatRupiah(invoice.final_total)}</span>
+            </div>
+
+            <div className="mt-3 border-t border-dashed border-amber-300 pt-3">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                Catatan Penjualan
+              </span>
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm font-normal text-gray-800">
+                {getSaleNote(invoice) || "-"}
+              </p>
             </div>
 
           </div>
