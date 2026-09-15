@@ -13,7 +13,11 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
   await store.replaceCatalog({
     cursor: 0,
     locations: [{ id: 1, name: "Toko" }],
-    contacts: [{ id: 1, name: "Umum" }],
+    contacts: [
+      { id: 1, name: "Umum versi lama" },
+      { id: "1", name: "Umum" },
+      { id: null, name: "Tanpa ID" },
+    ],
     products: [{
       id: 1, name: "Produk", sku: "SKU-1", enable_stock: 1,
       is_active: 1, is_inactive: 0,
@@ -36,6 +40,7 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
       is_active: "true", product_variations: [],
     }],
   });
+  assert.deepEqual(await store.getLocalContacts(), [{ id: 1, name: "Umum" }]);
   assert.deepEqual((await store.searchLocalProducts({ per_page: 100 })).map((product) => product.id), [1, 4]);
   await store.addInvoiceNumbers(["P1020260001"]);
   const invoice = await store.peekInvoiceNumber("2026-10-14 10:00:00");

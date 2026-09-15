@@ -19,6 +19,14 @@ const isActiveProduct = (product) => {
   if (product?.is_inactive !== undefined && product?.is_inactive !== null) return !trueFlag(product.is_inactive);
   return false;
 };
+const uniqueNumericIds = (rows = []) => Array.from(new Map(
+  rows
+    .filter((row) => Number.isInteger(Number(row?.id)) && Number(row.id) > 0)
+    .map((row) => {
+      const normalized = { ...row, id: Number(row.id) };
+      return [normalized.id, normalized];
+    }),
+).values());
 
 async function nativeDb() {
   if (!isNative) return null;
@@ -101,24 +109,35 @@ export async function recordSaleActivity({
 }
 
 export async function replaceCatalog({ products = [], contacts = [], locations = [], cursor = 0 }) {
-  const activeProducts = products.filter(isActiveProduct);
+  const activeProducts = uniqueNumericIds(products).filter(isActiveProduct);
+  const uniqueContacts = uniqueNumericIds(contacts);
+  const uniqueLocations = uniqueNumericIds(locations);
   const db = await nativeDb();
   if (!db) {
     const data = readWeb();
-    Object.assign(data, { products: activeProducts, contacts, locations });
+    Object.assign(data, { products: activeProducts, contacts: uniqueContacts, locations: uniqueLocations });
     data.meta.cursor = String(cursor);
     writeWeb(data);
     return;
   }
   await db.execute("DELETE FROM products; DELETE FROM contacts; DELETE FROM locations;");
   for (const product of activeProducts) {
-    await db.run("INSERT INTO products(id,sku,name,payload) VALUES (?,?,?,?)", [product.id, product.sku || "", product.name || "", JSON.stringify(product)]);
+    await db.run(
+      "INSERT INTO products(id,sku,name,payload) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET sku=excluded.sku,name=excluded.name,payload=excluded.payload",
+      [product.id, product.sku || "", product.name || "", JSON.stringify(product)],
+    );
   }
-  for (const contact of contacts) {
-    await db.run("INSERT INTO contacts(id,name,payload) VALUES (?,?,?)", [contact.id, contact.name || "", JSON.stringify(contact)]);
+  for (const contact of uniqueContacts) {
+    await db.run(
+      "INSERT INTO contacts(id,name,payload) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,payload=excluded.payload",
+      [contact.id, contact.name || "", JSON.stringify(contact)],
+    );
   }
-  for (const location of locations) {
-    await db.run("INSERT INTO locations(id,name,payload) VALUES (?,?,?)", [location.id, location.name || "", JSON.stringify(location)]);
+  for (const location of uniqueLocations) {
+    await db.run(
+      "INSERT INTO locations(id,name,payload) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,payload=excluded.payload",
+      [location.id, location.name || "", JSON.stringify(location)],
+    );
   }
   await setMeta("cursor", cursor);
 }
@@ -139,22 +158,25 @@ export async function upsertProduct(product) {
 }
 
 export async function upsertContact(contact) {
+  const contactId = Number(contact?.id);
+  if (!Number.isInteger(contactId) || contactId <= 0) return;
+  const normalizedContact = { ...contact, id: contactId };
   const active = contact?.is_active === undefined || Number(contact.is_active) === 1;
   const db = await nativeDb();
   if (!db) {
     const data = readWeb();
-    data.contacts = data.contacts.filter((row) => Number(row.id) !== Number(contact.id));
-    if (active) data.contacts.push(contact);
+    data.contacts = data.contacts.filter((row) => Number(row.id) !== contactId);
+    if (active) data.contacts.push(normalizedContact);
     writeWeb(data);
     return;
   }
   if (!active) {
-    await db.run("DELETE FROM contacts WHERE id=?", [contact.id]);
+    await db.run("DELETE FROM contacts WHERE id=?", [contactId]);
     return;
   }
   await db.run(
-    "INSERT OR REPLACE INTO contacts(id,name,payload) VALUES (?,?,?)",
-    [contact.id, contact.name || "", JSON.stringify(contact)],
+    "INSERT INTO contacts(id,name,payload) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,payload=excluded.payload",
+    [contactId, normalizedContact.name || "", JSON.stringify(normalizedContact)],
   );
 }
 

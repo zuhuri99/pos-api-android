@@ -183,11 +183,16 @@ def _email_payload(
     }
 
 
-def _send_resend_request(url: str, payload: dict | list[dict], idempotency_key: str) -> None:
+def _send_resend_request(
+    url: str,
+    payload: dict | list[dict],
+    idempotency_key: str,
+    timeout_seconds: int = 15,
+) -> bool:
     settings = get_settings()
     if not settings.resend_api_key or not settings.resend_from_email or not settings.transaction_notification_emails:
         logger.warning("Notifikasi transaksi dilewati karena konfigurasi Resend belum lengkap.")
-        return
+        return False
     request = Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -200,13 +205,16 @@ def _send_resend_request(url: str, payload: dict | list[dict], idempotency_key: 
         },
     )
     try:
-        with urlopen(request, timeout=15) as response:
+        with urlopen(request, timeout=timeout_seconds) as response:
             if response.status < 200 or response.status >= 300:
                 logger.error("Resend mengembalikan status %s.", response.status)
+                return False
+            return True
     except HTTPError as error:
         logger.error("Notifikasi Resend gagal dengan status %s.", error.code)
     except (URLError, TimeoutError, OSError) as error:
         logger.error("Notifikasi Resend gagal dikirim: %s", error)
+    return False
 
 
 def send_transaction_notification(

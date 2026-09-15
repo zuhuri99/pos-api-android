@@ -21,6 +21,18 @@ Compose memakai `${VARIABLE:?}` untuk `DATABASE_URL`, `APP_SECRET`, `ADMIN_PASSW
 
 Notifikasi transaksi akun kasir dikirim melalui HTTP API Resend setelah transaksi berhasil tersimpan. `RESEND_FROM_EMAIL` wajib memakai domain yang sudah diverifikasi di Resend. Beberapa penerima dapat ditulis pada `TRANSACTION_NOTIFICATION_EMAILS` dengan pemisah koma.
 
+## Backup database terjadwal
+
+Image aplikasi menyertakan `pg_dump` dan `pg_restore`. Tambahkan Scheduled Task pada service `api` dengan command:
+
+```text
+python -m app.backup
+```
+
+Contoh jadwal cron harian pukul 02.00 WIB adalah `0 2 * * *`; pastikan timezone scheduled task menggunakan `Asia/Jakarta`. Backup dibuat dalam format custom PostgreSQL, diperiksa sebelum dikirim, lalu dilampirkan ke email pada `TRANSACTION_NOTIFICATION_EMAILS`. Scheduled task dianggap gagal jika dump, validasi, atau pengiriman Resend gagal sehingga kegagalan dapat terlihat pada riwayat job Coolify.
+
+Lampiran backup dibatasi 29 MB sebelum Base64. Jika ukuran database mendekati batas tersebut, pindahkan backup terjadwal ke object storage karena batas total email Resend adalah 40 MB.
+
 ## Health check
 
 Endpoint `GET /health` memeriksa proses API sekaligus menjalankan `SELECT 1` ke PostgreSQL. Health check internal menggunakan:

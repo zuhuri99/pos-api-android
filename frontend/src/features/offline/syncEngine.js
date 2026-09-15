@@ -20,7 +20,7 @@ import {
 
 let syncPromise;
 let listener;
-const CATALOG_CACHE_VERSION = "active-products-v2";
+const CATALOG_CACHE_VERSION = "contact-upsert-v3";
 
 async function deviceId() {
   const info = await getLoginDeviceInfo();

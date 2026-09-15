@@ -56,6 +56,31 @@ APK Android harus menggunakan endpoint HTTPS. Login pertama dan pengisian katalo
 - Cursor sinkronisasi berasal dari sequence server, bukan jam perangkat.
 - Tombol **Hapus** pada detail nota membuat void: stok dikembalikan, alasan dicatat, nomor invoice tetap terpakai, dan operasi dapat diantrekan saat offline.
 
+## Backup database melalui email
+
+Container API menyediakan perintah berikut untuk membuat backup PostgreSQL format custom, memvalidasinya dengan `pg_restore`, lalu mengirimkannya sebagai lampiran melalui Resend ke seluruh alamat pada `TRANSACTION_NOTIFICATION_EMAILS`:
+
+```bash
+docker compose exec -T api python -m app.backup
+```
+
+Contoh cron harian pukul 02.00 WIB pada host Docker:
+
+```cron
+CRON_TZ=Asia/Jakarta
+0 2 * * * cd /PATH/KE/PROJECT && /usr/bin/docker compose exec -T api python -m app.backup >> /var/log/asas-pos-backup.log 2>&1
+```
+
+Jika memakai Scheduled Task Coolify, jalankan `python -m app.backup` langsung di container service `api`. Job mengembalikan exit code nonzero apabila pembuatan, validasi, atau pengiriman email gagal. File sementara otomatis dihapus setelah email dikirim. Lampiran mentah dibatasi 29 MB agar tetap berada di bawah batas total email Resend setelah Base64; database yang lebih besar harus memakai penyimpanan backup eksternal.
+
+Contoh pemulihan ke database tujuan:
+
+```bash
+pg_restore --clean --if-exists --no-owner --no-privileges --dbname="postgresql://USER:PASSWORD@HOST:5432/DATABASE_TUJUAN" asas-pos-NAMA_DATABASE-YYYYMMDD-HHMMSS-WIB.dump
+```
+
+Jalankan pemulihan terlebih dahulu pada database terpisah untuk menguji integritas dan prosedur restore.
+
 ## Import produk
 
 Gunakan CSV UTF-8 atau XLSX dengan header:
