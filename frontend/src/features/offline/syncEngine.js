@@ -26,9 +26,10 @@ async function deviceId() {
   return info.device_id || "android-pos";
 }
 
-export async function refreshInvoiceSequence(dateValue = new Date()) {
+export async function refreshInvoiceSequence(dateValue = new Date(), requestConfig = {}) {
   const { year, month } = wibYearMonth(dateValue);
   const response = await incomeApi.get("/income/pos/invoice-numbers/next", {
+    ...requestConfig,
     params: { year, month }, skipIncomeFallback: true,
   });
   const state = response.data?.data || {};

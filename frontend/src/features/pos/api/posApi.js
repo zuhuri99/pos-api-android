@@ -17,6 +17,7 @@ import {
   upsertContact,
 } from "../../offline/localStore";
 import { refreshInvoiceSequence, syncNow } from "../../offline/syncEngine";
+import { resolveNextInvoiceNumber } from "../invoiceNumber";
 
 const response = (data, extra = {}) => ({ data: { data, ...extra } });
 
@@ -81,8 +82,13 @@ export const posApi = {
   },
   async nextInvoice(transactionDate) {
     const userCode = getActiveAccount()?.user?.is_superuser ? 1 : 2;
-    if (navigator.onLine) await refreshInvoiceSequence(transactionDate);
-    return peekInvoiceNumber(transactionDate, userCode);
+    return resolveNextInvoiceNumber({
+      transactionDate,
+      userCode,
+      online: navigator.onLine,
+      refreshRemote: (date) => refreshInvoiceSequence(date, { timeout: 5000 }),
+      peekLocal: peekInvoiceNumber,
+    });
   },
   async bootstrap() {
     return response(await ensureCatalog());
