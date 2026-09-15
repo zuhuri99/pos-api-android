@@ -8,6 +8,7 @@ import { jsPDF } from "jspdf";
 import { QRCodeSVG } from "qrcode.react";
 import { getPaymentStatusText } from "../utils/paymentStatus";
 import { isDraftTransaction } from "../features/pos/transactionStatus";
+import { getSaleNote } from "../utils/saleNote";
 
 /* ===============================
  * HELPER FORMATTING
@@ -636,20 +637,10 @@ const InvoiceTicket = ({ invoice }) => {
               : "-"}
           </div>
 
-          {/* Catatan Tambahan (Cat) */}
+          {/* Catatan Penjualan */}
           <div className="leading-tight break-words">
             <span className="font-bold">Catatan:</span>{" "}
-            {invoice.additional_notes && invoice.additional_notes.trim() !== ""
-              ? invoice.additional_notes
-              : "-"}
-          </div>
-
-          {/* Staff Note (Stf) */}
-          <div className="leading-tight break-words">
-            <span className="font-bold">Staff Note:</span>{" "}
-            {invoice.staff_note && invoice.staff_note.trim() !== ""
-              ? invoice.staff_note
-              : "-"}
+            {getSaleNote(invoice) || "-"}
           </div>
         </div>
 

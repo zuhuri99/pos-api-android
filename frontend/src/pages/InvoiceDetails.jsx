@@ -18,6 +18,7 @@ import { jsPDF } from "jspdf";
 import { QRCodeSVG } from "qrcode.react";
 import { getActiveAccount } from "../utils/auth";
 import { formatWibDateTime } from "../utils/dateTime";
+import { getSaleNote } from "../utils/saleNote";
 
 const formatRupiah = (angka) => {
   return new Intl.NumberFormat("id-ID", {
@@ -97,7 +98,7 @@ const buildThermalReceiptData = (invoice) => {
       ).toUpperCase(),
       amount: `Rp ${formatRupiah(payment.amount)}`,
     })),
-    notes: [invoice.additional_notes, invoice.staff_note].filter(Boolean).join(" | "),
+    notes: getSaleNote(invoice),
     footer: "Barang terbeli tidak dapat ditukar/dikembalikan, kecuali ada perjanjian.\nBUKA 08.00-16.00 - JUMAT LIBUR\nTERIMA KASIH.\nWHATSAPP: 085725936666",
     qr: getSafeExternalUrl(invoice.invoice_url) || "",
   };
@@ -579,15 +580,9 @@ export default function InvoiceDetails() {
             <div className="mt-3 pt-3 border-t border-dashed border-gray-200 flex flex-col gap-2 text-xs text-gray-600">
               <div>
                 <span className="font-semibold text-gray-700 block mb-0.5">
-                  Catatan Tambahan:
+                  Catatan Penjualan:
                 </span>
-                <span>{invoice.additional_notes || "-"}</span>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-700 block mb-0.5">
-                  Catatan Staf:
-                </span>
-                <span>{invoice.staff_note || "-"}</span>
+                <span>{getSaleNote(invoice) || "-"}</span>
               </div>
             </div>
           </div>
@@ -826,12 +821,8 @@ export default function InvoiceDetails() {
                   {/* CATATAN */}
                   <div className="flex flex-col gap-0.5 border-b border-dashed border-black pb-2 mb-2 text-[12px]">
                     <div>
-                      <span className="font-bold">Catatan Tambahan:</span>{" "}
-                      {invoice.additional_notes || "-"}
-                    </div>
-                    <div>
-                      <span className="font-bold">Catatan Staf:</span>{" "}
-                      {invoice.staff_note || "-"}
+                      <span className="font-bold">Catatan Penjualan:</span>{" "}
+                      {getSaleNote(invoice) || "-"}
                     </div>
                   </div>
 
