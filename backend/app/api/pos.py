@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..core.db import get_db
 from ..models import ChangeLog, Contact, InventoryBalance, Location, Product, ProductVariation, Sale, User
-from ..schemas import ContactCreate, InvoiceReservationRequest, SaleCreate, SaleDelete, SaleMark
-from ..services.invoices import reserve_invoice_numbers
+from ..schemas import ContactCreate, SaleCreate, SaleDelete, SaleMark
+from ..services.invoices import next_invoice_state
 from ..services.notifications import queue_transaction_notification
 from ..services.sales import create_sale, get_sale, mark_sale, serialize_sale, update_sale, void_sale
 from .deps import authorize_sale_delete, current_user
@@ -141,11 +141,14 @@ def stock_report(
     } for balance, variation, product in db.execute(query).all()]}
 
 
-@router.post("/income/pos/invoice-numbers/reserve")
-def reserve_numbers(payload: InvoiceReservationRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    numbers = reserve_invoice_numbers(db, user.business_id, payload.device_id, payload.year, payload.month, payload.count)
-    db.commit()
-    return {"data": {"numbers": numbers, "count": len(numbers)}}
+@router.get("/income/pos/invoice-numbers/next")
+def next_invoice_number(
+    year: int = Query(ge=2020, le=9999),
+    month: int = Query(ge=1, le=12),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return {"data": next_invoice_state(db, user, year, month)}
 
 
 @router.post("/income/pos/transactions")

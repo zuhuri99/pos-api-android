@@ -42,10 +42,13 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
   });
   assert.deepEqual(await store.getLocalContacts(), [{ id: 1, name: "Umum" }]);
   assert.deepEqual((await store.searchLocalProducts({ per_page: 100 })).map((product) => product.id), [1, 4]);
-  await store.addInvoiceNumbers(["P1020260001"]);
-  const invoice = await store.peekInvoiceNumber("2026-10-14 10:00:00");
-  assert.equal(invoice, "P1020260001");
-  assert.equal(await store.peekInvoiceNumber("2026-10-14 10:00:00"), "P1020260001");
+  await store.seedInvoiceSequence(1, 2026, 10, 0);
+  const invoice = await store.peekInvoiceNumber("2026-10-14 10:00:00", 1);
+  assert.equal(invoice, "P1020261001");
+  assert.equal(await store.peekInvoiceNumber("2026-10-14 10:00:00", 1), "P1020261001");
+  await store.seedInvoiceSequence(2, 2026, 10, 7);
+  assert.equal(await store.peekInvoiceNumber("2026-10-14 10:00:00", 2), "P1020262008");
+  assert.equal(await store.peekInvoiceNumber("2026-11-14 10:00:00", 1), "P1120261001");
 
   const sale = await store.saveLocalSale({
     invoice_no: invoice, location_id: 1, contact_id: 1,
@@ -53,7 +56,7 @@ test("transaksi offline tersimpan atomik di outbox dan mengurangi stok lokal", a
     products: [{ product_id: 1, variation_id: 10, quantity: 2, unit_price: 5000 }],
     payments: [{ amount: 10000, method: "cash" }],
   });
-  assert.equal(await store.peekInvoiceNumber("2026-10-14 10:00:00"), "");
+  assert.equal(await store.peekInvoiceNumber("2026-10-14 10:00:00", 1), "P1020261002");
   assert.equal((await store.getLocalStock(1))[0].stock, "8");
   await store.saveLocalSale({
     ...sale,

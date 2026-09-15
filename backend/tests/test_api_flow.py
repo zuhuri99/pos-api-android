@@ -73,6 +73,22 @@ def test_web_login_can_be_disabled_but_android_remains_available(monkeypatch):
     assert android.status_code == 200
 
 
+def test_invoice_sequence_is_separate_for_admin_and_regular_user():
+    with TestClient(app) as client:
+        admin = client.get(
+            "/api/v1/income/pos/invoice-numbers/next?year=2026&month=11",
+            headers=auth_headers(client),
+        )
+        regular = client.get(
+            "/api/v1/income/pos/invoice-numbers/next?year=2026&month=11",
+            headers=user_headers(client),
+        )
+        assert admin.status_code == 200
+        assert regular.status_code == 200
+        assert admin.json()["data"]["invoice_no"] == "P1120261001"
+        assert regular.json()["data"]["invoice_no"] == "P1120262001"
+
+
 def test_product_sale_and_idempotent_offline_sync():
     with TestClient(app) as client:
         headers = auth_headers(client)
@@ -114,11 +130,11 @@ def test_product_sale_and_idempotent_offline_sync():
         product = catalog[0]
         variation = product["product_variations"][0]["variations"][0]
 
-        reservation = client.post("/api/v1/income/pos/invoice-numbers/reserve", headers=headers, json={
-            "device_id": "test-device", "year": 2026, "month": 10, "count": 2,
-        })
-        assert reservation.status_code == 200, reservation.text
-        assert reservation.json()["data"]["numbers"][0] == "P1020260001"
+        next_invoice = client.get(
+            "/api/v1/income/pos/invoice-numbers/next?year=2026&month=10", headers=headers,
+        )
+        assert next_invoice.status_code == 200, next_invoice.text
+        assert next_invoice.json()["data"]["invoice_no"] == "P1020261001"
 
         entity_id, operation_id = str(uuid4()), str(uuid4())
         body = {
@@ -128,7 +144,7 @@ def test_product_sale_and_idempotent_offline_sync():
                 "entity_id": entity_id, "base_revision": 0,
                 "payload": {
                     "client_transaction_id": entity_id, "device_id": "test-device",
-                    "location_id": 1, "contact_id": 1, "invoice_no": "P1020260001",
+                    "location_id": 1, "contact_id": 1, "invoice_no": "P1020261001",
                     "transaction_date": "2026-10-14T10:00:00+07:00", "status": "final",
                     "products": [{
                         "product_id": product["id"], "variation_id": variation["id"],
@@ -144,6 +160,10 @@ def test_product_sale_and_idempotent_offline_sync():
         assert first.status_code == 200, first.text
         assert second.status_code == 200, second.text
         assert first.json() == second.json()
+        following_invoice = client.get(
+            "/api/v1/income/pos/invoice-numbers/next?year=2026&month=10", headers=headers,
+        )
+        assert following_invoice.json()["data"]["invoice_no"] == "P1020261002"
 
         stock = client.get("/api/v1/pos-data/product-stock-report?location_id=1", headers=headers)
         assert stock.status_code == 200
@@ -151,7 +171,7 @@ def test_product_sale_and_idempotent_offline_sync():
 
         sale_id = first.json()["data"]["results"][0]["server_id"]
         transaction_list = client.get(
-            "/api/v1/income/pos/transactions?year=2026&search=P1020260001",
+            "/api/v1/income/pos/transactions?year=2026&search=P1020261001",
             headers=headers,
         )
         assert transaction_list.status_code == 200, transaction_list.text
@@ -244,13 +264,13 @@ def test_product_sale_and_idempotent_offline_sync():
         assert active_sales == []
 
 
-def test_client_invoice_requires_device_reservation():
+def test_invoice_user_code_must_match_logged_in_account():
     with TestClient(app) as client:
         headers = auth_headers(client)
         response = client.post("/api/v1/income/pos/transactions", headers=headers, json={
             "location_id": 1,
             "contact_id": 1,
-            "invoice_no": "P1020260099",
+            "invoice_no": "P1020262001",
             "transaction_date": "2026-10-14T10:00:00+07:00",
             "status": "final",
             "products": [{
@@ -261,4 +281,4 @@ def test_client_invoice_requires_device_reservation():
             }],
         })
         assert response.status_code == 422
-        assert "device_id wajib" in response.json()["detail"]
+        assert "Kode user" in response.json()["detail"]

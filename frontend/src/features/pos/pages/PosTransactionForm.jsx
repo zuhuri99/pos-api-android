@@ -685,7 +685,7 @@ export default function PosTransactionForm() {
                       type="text"
                       value={form.invoice_no || ""}
                       readOnly
-                      placeholder={generatingInvoice ? "Memeriksa nomor berikutnya…" : "Contoh: P1020260001"}
+                      placeholder={generatingInvoice ? "Memeriksa nomor berikutnya…" : "Contoh: P1020261001"}
                       className="h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-2 pr-8 text-xs font-extrabold uppercase outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 read-only:bg-slate-100"
                       maxLength={11}
                       required

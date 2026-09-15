@@ -16,7 +16,7 @@ import {
   peekInvoiceNumber,
   upsertContact,
 } from "../../offline/localStore";
-import { replenishInvoices, syncNow } from "../../offline/syncEngine";
+import { refreshInvoiceSequence, syncNow } from "../../offline/syncEngine";
 
 const response = (data, extra = {}) => ({ data: { data, ...extra } });
 
@@ -80,13 +80,9 @@ export const posApi = {
     }
   },
   async nextInvoice(transactionDate) {
-    let number = await peekInvoiceNumber(transactionDate);
-    if (!number && navigator.onLine) {
-      await replenishInvoices(transactionDate);
-      number = await peekInvoiceNumber(transactionDate);
-    }
-    if (!number) throw new Error("Persediaan nomor invoice offline habis. Hubungkan internet untuk mengambil nomor baru.");
-    return number;
+    const userCode = getActiveAccount()?.user?.is_superuser ? 1 : 2;
+    if (navigator.onLine) await refreshInvoiceSequence(transactionDate);
+    return peekInvoiceNumber(transactionDate, userCode);
   },
   async bootstrap() {
     return response(await ensureCatalog());

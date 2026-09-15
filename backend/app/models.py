@@ -129,26 +129,6 @@ class StockMovement(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class InvoiceCounter(Base):
-    __tablename__ = "invoice_counters"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    business_id: Mapped[int] = mapped_column(ForeignKey("businesses.id"), index=True)
-    period: Mapped[str] = mapped_column(String(6))  # YYYYMM
-    last_number: Mapped[int] = mapped_column(Integer, default=0)
-    __table_args__ = (UniqueConstraint("business_id", "period", name="uq_invoice_counter_period"),)
-
-
-class InvoiceReservation(Base):
-    __tablename__ = "invoice_reservations"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    business_id: Mapped[int] = mapped_column(ForeignKey("businesses.id"), index=True)
-    device_id: Mapped[str] = mapped_column(String(120), index=True)
-    period: Mapped[str] = mapped_column(String(6))
-    start_number: Mapped[int] = mapped_column(Integer)
-    end_number: Mapped[int] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
 class Sale(Base):
     __tablename__ = "sales"
     id: Mapped[int] = mapped_column(primary_key=True)

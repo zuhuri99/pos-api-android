@@ -1,10 +1,8 @@
 import incomeApi from "../../api/incomeAxios";
-import { getAuthToken } from "../../utils/auth";
+import { getActiveAccount, getAuthToken } from "../../utils/auth";
 import { getLoginDeviceInfo } from "../../platform/deviceInfo";
 import { wibYearMonth } from "../../utils/dateTime";
 import {
-  addInvoiceNumbers,
-  availableInvoiceCount,
   getMeta,
   initializeLocalStore,
   markOperationFailed,
@@ -14,6 +12,7 @@ import {
   setMeta,
   applyInventoryChange,
   applyRemoteSaleDelete,
+  seedInvoiceSequence,
   upsertContact,
   upsertProduct,
 } from "./localStore";
@@ -27,13 +26,15 @@ async function deviceId() {
   return info.device_id || "android-pos";
 }
 
-async function replenishInvoices(dateValue = new Date()) {
+export async function refreshInvoiceSequence(dateValue = new Date()) {
   const { year, month } = wibYearMonth(dateValue);
-  if (await availableInvoiceCount(year, month) >= 20) return;
-  const response = await incomeApi.post("/income/pos/invoice-numbers/reserve", {
-    device_id: await deviceId(), year, month, count: 100,
-  }, { skipIncomeFallback: true });
-  await addInvoiceNumbers(response.data?.data?.numbers || []);
+  const response = await incomeApi.get("/income/pos/invoice-numbers/next", {
+    params: { year, month }, skipIncomeFallback: true,
+  });
+  const state = response.data?.data || {};
+  const fallbackCode = getActiveAccount()?.user?.is_superuser ? 1 : 2;
+  await seedInvoiceSequence(state.user_code || fallbackCode, year, month, state.last_number || 0);
+  return state;
 }
 
 export async function syncNow() {
@@ -51,7 +52,7 @@ export async function syncNow() {
       await setMeta("bootstrapped", "1");
       await setMeta("catalog_cache_version", CATALOG_CACHE_VERSION);
     }
-    await replenishInvoices().catch(() => {});
+    await refreshInvoiceSequence().catch(() => {});
     const operations = await pendingOperations();
     for (let offset = 0; offset < operations.length; offset += 50) {
       const batch = operations.slice(offset, offset + 50);
@@ -102,5 +103,3 @@ export async function initializeSyncEngine() {
   }
   syncNow().catch(() => {});
 }
-
-export { replenishInvoices };

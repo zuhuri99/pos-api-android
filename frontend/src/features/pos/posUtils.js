@@ -11,11 +11,11 @@ export const localTransactionDate = currentWibDateTime;
 
 export const posInvoicePrefix = () => "P";
 
-export const nextPosInvoiceNumber = (groupedTransactions, _prefix, year, month) => {
+export const nextPosInvoiceNumber = (groupedTransactions, userCode, year, month) => {
   const firstSequence = 1;
-  const maxSequence = 9999;
+  const maxSequence = 999;
   const normalizedMonth = String(month).padStart(2, "0");
-  const stem = `P${normalizedMonth}${year}`;
+  const stem = `P${normalizedMonth}${year}${userCode}`;
   const invoices = Array.isArray(groupedTransactions)
     ? groupedTransactions
     : Object.values(groupedTransactions || {}).flatMap((items) =>
@@ -25,17 +25,17 @@ export const nextPosInvoiceNumber = (groupedTransactions, _prefix, year, month) 
     const invoiceNumber = String(transaction?.invoice_no || "").toUpperCase();
     if (!invoiceNumber.startsWith(stem)) return largest;
     const suffix = invoiceNumber.slice(stem.length);
-    if (!/^\d{4}$/.test(suffix)) return largest;
+    if (!/^\d{3}$/.test(suffix)) return largest;
     const sequence = Number(suffix);
     if (sequence < firstSequence || sequence > maxSequence) return largest;
     return Math.max(largest, sequence);
   }, firstSequence - 1);
 
   if (foundSequence >= maxSequence) {
-    throw new RangeError(`Rentang nomor invoice ${stem}0001-${stem}9999 sudah habis.`);
+    throw new RangeError(`Rentang nomor invoice ${stem}001-${stem}999 sudah habis.`);
   }
 
-  return `${stem}${String(foundSequence + 1).padStart(4, "0")}`;
+  return `${stem}${String(foundSequence + 1).padStart(3, "0")}`;
 };
 
 export const flattenPosProducts = (products, locationId) => {

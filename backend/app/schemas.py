@@ -126,13 +126,6 @@ class SyncPushRequest(BaseModel):
     operations: list[SyncOperationIn] = Field(max_length=100)
 
 
-class InvoiceReservationRequest(BaseModel):
-    device_id: str
-    year: int = Field(ge=2020, le=9999)
-    month: int = Field(ge=1, le=12)
-    count: int = Field(default=100, ge=1, le=500)
-
-
 class ProductImportRow(BaseModel):
     sku: str
     name: str

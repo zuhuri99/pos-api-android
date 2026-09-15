@@ -21,5 +21,6 @@ test("penyimpanan offline memakai kontrak SQLiteConnection v8", () => {
   assert.match(localStore, /db\.isDBOpen\(\)/);
   assert.match(localStore, /db\.run\("INSERT OR REPLACE INTO meta\(key,value\) VALUES \(\?,\?\)", \[key, String\(value\)\]\)/);
   assert.match(localStore, /db\.query\("SELECT value FROM meta WHERE key=\?", \[key\]\)/);
-  assert.match(localStore, /db\.run\("UPDATE invoice_numbers SET used=1[^\n]+\[invoice\], false\)/);
+  assert.match(localStore, /CREATE TABLE IF NOT EXISTS invoice_sequences/);
+  assert.doesNotMatch(localStore, /CREATE TABLE IF NOT EXISTS invoice_numbers/);
 });

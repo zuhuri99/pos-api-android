@@ -4,7 +4,7 @@ POS mandiri dengan FastAPI/PostgreSQL 16 dan aplikasi Android React/Capacitor. U
 
 ## Nomor invoice
 
-Format nomor: `P{bulan 2 digit}{tahun 4 digit}{urutan 4 digit}`. Contoh transaksi pertama Oktober 2026 adalah `P1020260001`. Backend membagikan blok nomor ke perangkat agar nomor dapat dibuat saat offline.
+Format nomor: `P{bulan 2 digit}{tahun 4 digit}{kode user}{urutan 3 digit}`. Kode admin `1`, kode user biasa `2`; contohnya `P1020261001` dan `P1020262001`. Setiap akun memiliki urutan bulanan lokal sendiri agar tetap dapat bertransaksi offline tanpa reservasi blok nomor.
 
 ## Deployment production Coolify
 

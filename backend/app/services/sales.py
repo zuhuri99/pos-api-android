@@ -20,7 +20,7 @@ from ..models import (
     User,
 )
 from ..schemas import SaleCreate, SaleMark
-from .invoices import next_online_invoice, validate_invoice_period, validate_invoice_reservation
+from .invoices import invoice_user_code, next_online_invoice, validate_invoice_period
 
 
 WIB = ZoneInfo("Asia/Jakarta")
@@ -166,10 +166,8 @@ def create_sale(db: Session, user: User, data: SaleCreate) -> Sale:
     if not db.scalar(select(Location.id).where(Location.id == data.location_id, Location.business_id == user.business_id, Location.is_active.is_(True))):
         raise HTTPException(422, "Lokasi tidak ditemukan atau tidak aktif.")
 
-    invoice_no = data.invoice_no or next_online_invoice(db, user.business_id, data.transaction_date)
-    validate_invoice_period(invoice_no, data.transaction_date)
-    if data.invoice_no:
-        validate_invoice_reservation(db, user.business_id, data.device_id, invoice_no)
+    invoice_no = data.invoice_no or next_online_invoice(db, user, data.transaction_date)
+    validate_invoice_period(invoice_no, data.transaction_date, invoice_user_code(user))
     if db.scalar(select(Sale.id).where(Sale.business_id == user.business_id, Sale.invoice_no == invoice_no)):
         raise HTTPException(409, {"code": "duplicate_invoice", "invoice_no": invoice_no})
     subtotal = Decimal("0")

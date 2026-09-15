@@ -3,7 +3,7 @@ from app.services.notifications import _email_payload
 
 def test_mark_notification_contains_reason_and_transaction_items():
     payload = _email_payload("mark", {
-        "invoice_no": "P0920260001",
+        "invoice_no": "P0920261001",
         "transaction_date": "2026-09-15T10:00:00+07:00",
         "contact": "Pelanggan",
         "final_total": "25000",
@@ -17,7 +17,7 @@ def test_mark_notification_contains_reason_and_transaction_items():
         "payments": [{"method": "cash", "amount": "25000"}],
     }, "kasir")
 
-    assert payload["subject"] == "[ASAS POS] Transaksi ditandai · P0920260001"
+    assert payload["subject"] == "[ASAS POS] Transaksi ditandai · P0920261001"
     assert "Harga perlu diperiksa" in payload["html"]
     assert "Produk A" in payload["html"]
     assert "Merah" in payload["html"]

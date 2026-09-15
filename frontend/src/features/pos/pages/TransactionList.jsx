@@ -118,7 +118,7 @@ export default function TransactionList() {
             </label>
             <label className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
               Cari nomor invoice
-              <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Contoh P1020260001" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-400" />
+              <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Contoh P1020261001" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-blue-400" />
             </label>
           </div>
           {offline && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">Mode offline: menampilkan transaksi yang tersimpan di perangkat.</p>}

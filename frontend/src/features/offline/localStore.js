@@ -3,7 +3,7 @@ import { wibYearMonth } from "../../utils/dateTime.js";
 
 const WEB_KEY = "pos.offline.store.v1";
 const emptyWebStore = () => ({
-  meta: {}, products: [], contacts: [], locations: [], sales: [], outbox: [], invoices: [], activities: [],
+  meta: {}, products: [], contacts: [], locations: [], sales: [], outbox: [], invoice_sequences: [], activities: [],
 });
 let connectionPromise;
 
@@ -61,8 +61,8 @@ async function nativeDb() {
         CREATE TABLE IF NOT EXISTS outbox (operation_id TEXT PRIMARY KEY NOT NULL, entity_id TEXT NOT NULL, action TEXT NOT NULL, payload TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT, created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS sale_activity (activity_id TEXT PRIMARY KEY NOT NULL, entity_id TEXT NOT NULL, invoice_no TEXT NOT NULL, action TEXT NOT NULL, status TEXT NOT NULL, activity_at TEXT NOT NULL, error TEXT);
         CREATE INDEX IF NOT EXISTS idx_sale_activity_time ON sale_activity(activity_at);
-        CREATE TABLE IF NOT EXISTS invoice_numbers (invoice_no TEXT PRIMARY KEY NOT NULL, period TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0);
-        CREATE INDEX IF NOT EXISTS idx_invoice_available ON invoice_numbers(period, used, invoice_no);
+        CREATE TABLE IF NOT EXISTS invoice_sequences (user_code INTEGER NOT NULL, period TEXT NOT NULL, last_number INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(user_code, period));
+        DROP TABLE IF EXISTS invoice_numbers;
       `);
       return db;
     })();
@@ -327,84 +327,81 @@ export async function getLocalStock(locationId) {
   )));
 }
 
-export async function addInvoiceNumbers(numbers) {
-  const db = await nativeDb();
-  if (!db) {
-    const data = readWeb();
-    const known = new Set(data.invoices.map((row) => row.invoice_no));
-    numbers.forEach((invoice_no) => { if (!known.has(invoice_no)) data.invoices.push({ invoice_no, period: invoice_no.slice(3, 7) + invoice_no.slice(1, 3), used: 0 }); });
-    writeWeb(data); return;
-  }
-  for (const invoice of numbers) {
-    const period = `${invoice.slice(3, 7)}${invoice.slice(1, 3)}`;
-    await db.run("INSERT OR IGNORE INTO invoice_numbers(invoice_no,period,used) VALUES (?,?,0)", [invoice, period]);
-  }
-}
+const invoiceParts = (invoiceNo) => {
+  const match = /^P(\d{2})(\d{4})([12])(\d{3})$/.exec(String(invoiceNo || ""));
+  if (!match) return null;
+  return { month: Number(match[1]), year: Number(match[2]), userCode: Number(match[3]), number: Number(match[4]) };
+};
 
-export async function availableInvoiceCount(year, month) {
-  const period = `${year}${String(month).padStart(2, "0")}`;
-  const db = await nativeDb();
-  if (!db) return readWeb().invoices.filter((row) => row.period === period && !row.used).length;
-  const result = await db.query("SELECT COUNT(*) AS count FROM invoice_numbers WHERE period=? AND used=0", [period]);
-  return Number(result.values?.[0]?.count || 0);
-}
+const formatInvoice = (year, month, userCode, number) => {
+  if (![1, 2].includes(Number(userCode)) || number < 1 || number > 999) {
+    throw new RangeError("Nomor invoice user untuk bulan ini telah mencapai batas 999.");
+  }
+  return `P${String(month).padStart(2, "0")}${year}${userCode}${String(number).padStart(3, "0")}`;
+};
 
-export async function takeInvoiceNumber(dateValue) {
-  const { year, month } = wibYearMonth(dateValue);
+export async function seedInvoiceSequence(userCode, year, month, serverLastNumber = 0) {
   const period = `${year}${String(month).padStart(2, "0")}`;
   const db = await nativeDb();
   if (!db) {
     const data = readWeb();
-    const row = data.invoices.filter((item) => item.period === period && !item.used).sort((a, b) => a.invoice_no.localeCompare(b.invoice_no))[0];
-    if (!row) return "";
-    row.used = 1; writeWeb(data); return row.invoice_no;
+    const sequences = data.invoice_sequences || [];
+    const row = sequences.find((item) => Number(item.user_code) === Number(userCode) && item.period === period);
+    if (row) row.last_number = Math.max(Number(row.last_number || 0), Number(serverLastNumber || 0));
+    else sequences.push({ user_code: Number(userCode), period, last_number: Number(serverLastNumber || 0) });
+    data.invoice_sequences = sequences;
+    writeWeb(data);
+    return;
   }
-  const result = await db.query("SELECT invoice_no FROM invoice_numbers WHERE period=? AND used=0 ORDER BY invoice_no LIMIT 1", [period]);
-  const invoice = result.values?.[0]?.invoice_no;
-  if (!invoice) return "";
-  await db.beginTransaction();
-  try {
-    const claimed = await db.run("UPDATE invoice_numbers SET used=1 WHERE invoice_no=? AND used=0", [invoice], false);
-    if (!claimed.changes?.changes) { await db.rollbackTransaction(); return takeInvoiceNumber(dateValue); }
-    await db.commitTransaction();
-    return invoice;
-  } catch (error) {
-    await db.rollbackTransaction();
-    throw error;
-  }
-}
-
-export async function peekInvoiceNumber(dateValue) {
-  const { year, month } = wibYearMonth(dateValue);
-  const period = `${year}${String(month).padStart(2, "0")}`;
-  const db = await nativeDb();
-  if (!db) {
-    return readWeb().invoices
-      .filter((item) => item.period === period && !item.used)
-      .sort((a, b) => a.invoice_no.localeCompare(b.invoice_no))[0]?.invoice_no || "";
-  }
-  const result = await db.query(
-    "SELECT invoice_no FROM invoice_numbers WHERE period=? AND used=0 ORDER BY invoice_no LIMIT 1",
-    [period],
+  await db.run(
+    "INSERT INTO invoice_sequences(user_code,period,last_number) VALUES (?,?,?) ON CONFLICT(user_code,period) DO UPDATE SET last_number=MAX(last_number,excluded.last_number)",
+    [Number(userCode), period, Number(serverLastNumber || 0)],
   );
-  return result.values?.[0]?.invoice_no || "";
+}
+
+export async function peekInvoiceNumber(dateValue, userCode) {
+  const { year, month } = wibYearMonth(dateValue);
+  const period = `${year}${String(month).padStart(2, "0")}`;
+  const db = await nativeDb();
+  let lastNumber;
+  if (!db) {
+    const row = (readWeb().invoice_sequences || []).find((item) => Number(item.user_code) === Number(userCode) && item.period === period);
+    lastNumber = Number(row?.last_number || 0);
+  } else {
+    const result = await db.query(
+      "SELECT last_number FROM invoice_sequences WHERE user_code=? AND period=?",
+      [Number(userCode), period],
+    );
+    lastNumber = Number(result.values?.[0]?.last_number || 0);
+  }
+  return formatInvoice(year, month, Number(userCode), lastNumber + 1);
 }
 
 async function claimInvoiceNumber(db, data, invoiceNo) {
+  const parts = invoiceParts(invoiceNo);
+  if (!parts) throw new Error("Format nomor invoice tidak valid.");
+  const period = `${parts.year}${String(parts.month).padStart(2, "0")}`;
   if (data) {
-    const row = data.invoices.find((item) => item.invoice_no === invoiceNo && !item.used);
-    if (!row) throw new Error("Nomor invoice sudah digunakan. Muat ulang POS untuk mengambil nomor berikutnya.");
-    row.used = 1;
+    const sequences = data.invoice_sequences || [];
+    let row = sequences.find((item) => Number(item.user_code) === parts.userCode && item.period === period);
+    if (!row) {
+      row = { user_code: parts.userCode, period, last_number: 0 };
+      sequences.push(row);
+    }
+    if (parts.number !== Number(row.last_number) + 1) throw new Error("Nomor invoice sudah digunakan. Muat ulang POS untuk mengambil nomor berikutnya.");
+    row.last_number = parts.number;
+    data.invoice_sequences = sequences;
     return;
   }
-  const claimed = await db.run(
-    "UPDATE invoice_numbers SET used=1 WHERE invoice_no=? AND used=0",
-    [invoiceNo],
-    false,
-  );
-  if (!claimed.changes?.changes) {
+  const result = await db.query("SELECT last_number FROM invoice_sequences WHERE user_code=? AND period=?", [parts.userCode, period]);
+  const lastNumber = Number(result.values?.[0]?.last_number || 0);
+  if (parts.number !== lastNumber + 1) {
     throw new Error("Nomor invoice sudah digunakan. Muat ulang POS untuk mengambil nomor berikutnya.");
   }
+  await db.run(
+    "INSERT INTO invoice_sequences(user_code,period,last_number) VALUES (?,?,?) ON CONFLICT(user_code,period) DO UPDATE SET last_number=excluded.last_number",
+    [parts.userCode, period, parts.number], false,
+  );
 }
 
 export async function saveLocalSale(payload, action = "create", localId = null) {
